@@ -1,43 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-
-const mockCandidates = [
-  {
-    id: 'candidate-001',
-    name: 'Sarah Chen',
-    email: 'sarah.chen@email.com',
-    phone: '+1-555-0123',
-    location: 'San Francisco, CA',
-    skills: ['Python', 'Machine Learning', 'React'],
-    experienceLevel: 'senior',
-    aiScore: 92,
-    status: 'active',
-    createdAt: '2024-01-10T08:00:00Z'
-  },
-  {
-    id: 'candidate-002',
-    name: 'Michael Rodriguez',
-    email: 'michael.r@email.com',
-    phone: '+1-555-0124',
-    location: 'Austin, TX',
-    skills: ['Product Management', 'Agile', 'Analytics'],
-    experienceLevel: 'mid',
-    aiScore: 87,
-    status: 'active',
-    createdAt: '2024-01-12T10:30:00Z'
-  },
-  {
-    id: 'candidate-003',
-    name: 'Emily Wong',
-    email: 'emily.wong@email.com',
-    phone: '+1-555-0125',
-    location: 'New York, NY',
-    skills: ['UX Design', 'Figma', 'User Research'],
-    experienceLevel: 'junior',
-    aiScore: 79,
-    status: 'active',
-    createdAt: '2024-01-14T14:20:00Z'
-  }
-];
+import { getMemoryDB } from './init-db';
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
   // Remove auth check - allow all requests
@@ -50,28 +12,205 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'GET') {
-    return res.status(200).json({
-      success: true,
-      data: {
-        data: mockCandidates,
-        total: mockCandidates.length
+    try {
+      const db = getMemoryDB();
+      const candidates = db.candidates || [];
+      
+      // Apply filters
+      let filteredCandidates = candidates;
+      
+      if (req.query.search) {
+        const searchTerm = (req.query.search as string).toLowerCase();
+        filteredCandidates = filteredCandidates.filter((candidate: any) =>
+          `${candidate.firstName} ${candidate.lastName}`.toLowerCase().includes(searchTerm) ||
+          candidate.email.toLowerCase().includes(searchTerm) ||
+          candidate.currentPosition?.toLowerCase().includes(searchTerm) ||
+          candidate.currentCompany?.toLowerCase().includes(searchTerm) ||
+          candidate.location?.toLowerCase().includes(searchTerm) ||
+          candidate.skills?.some((skill: string) => skill.toLowerCase().includes(searchTerm))
+        );
       }
-    });
+      
+      if (req.query.source && req.query.source !== 'all') {
+        filteredCandidates = filteredCandidates.filter((candidate: any) => candidate.source === req.query.source);
+      }
+      
+      if (req.query.location && req.query.location !== 'all') {
+        filteredCandidates = filteredCandidates.filter((candidate: any) => 
+          candidate.location?.includes(req.query.location as string)
+        );
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          data: filteredCandidates,
+          total: filteredCandidates.length
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching candidates:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch candidates'
+      });
+    }
   }
 
   if (req.method === 'POST') {
-    const newCandidate = {
-      id: `candidate-${Date.now()}`,
-      ...req.body,
-      status: 'active',
-      aiScore: Math.floor(Math.random() * 40) + 60, // Random score 60-100
-      createdAt: new Date().toISOString()
-    };
-    
-    return res.status(201).json({
-      success: true,
-      data: newCandidate
-    });
+    try {
+      const db = getMemoryDB();
+      const newCandidate = {
+        id: `candidate-${Date.now()}`,
+        ...req.body,
+        status: req.body.status || 'active',
+        isBlacklisted: false,
+        aiScore: req.body.aiScore || Math.floor(Math.random() * 40) + 60, // Random score 60-100
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      // Add to memory database
+      db.candidates.push(newCandidate);
+
+      // Create audit log entry
+      const auditEntry = {
+        id: `audit-${Date.now()}`,
+        entityType: 'candidate',
+        entityId: newCandidate.id,
+        action: 'created',
+        changes: newCandidate,
+        oldValues: null,
+        timestamp: new Date().toISOString(),
+        userId: 'admin-user-id' // In production, get from auth
+      };
+
+      // Initialize audit log if not exists
+      if (!db.audit_log) {
+        db.audit_log = [];
+      }
+      db.audit_log.push(auditEntry);
+      
+      return res.status(201).json({
+        success: true,
+        data: newCandidate
+      });
+    } catch (error) {
+      console.error('Error creating candidate:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create candidate'
+      });
+    }
+  }
+
+  // Extract candidate ID from URL path for PUT and DELETE
+  const urlParts = req.url?.split('/') || [];
+  const candidateId = urlParts[urlParts.length - 1];
+
+  if (req.method === 'PUT') {
+    try {
+      const db = getMemoryDB();
+      const candidateIndex = db.candidates.findIndex((candidate: any) => candidate.id === candidateId);
+      
+      if (candidateIndex === -1) {
+        return res.status(404).json({
+          success: false,
+          error: 'Candidate not found'
+        });
+      }
+      
+      // Create audit log entry
+      const auditEntry = {
+        id: `audit-${Date.now()}`,
+        entityType: 'candidate',
+        entityId: candidateId,
+        action: 'updated',
+        changes: req.body,
+        oldValues: db.candidates[candidateIndex],
+        timestamp: new Date().toISOString(),
+        userId: 'admin-user-id' // In production, get from auth
+      };
+
+      // Initialize audit log if not exists
+      if (!db.audit_log) {
+        db.audit_log = [];
+      }
+      db.audit_log.push(auditEntry);
+
+      // Update candidate
+      const updatedCandidate = {
+        ...db.candidates[candidateIndex],
+        ...req.body,
+        updatedAt: new Date().toISOString()
+      };
+      
+      db.candidates[candidateIndex] = updatedCandidate;
+      
+      return res.status(200).json({
+        success: true,
+        data: updatedCandidate,
+        message: 'Candidate updated successfully'
+      });
+    } catch (error) {
+      console.error('Error updating candidate:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to update candidate'
+      });
+    }
+  }
+
+  if (req.method === 'DELETE') {
+    try {
+      const db = getMemoryDB();
+      const candidateIndex = db.candidates.findIndex((candidate: any) => candidate.id === candidateId);
+      
+      if (candidateIndex === -1) {
+        return res.status(404).json({
+          success: false,
+          error: 'Candidate not found'
+        });
+      }
+      
+      const deletedCandidate = db.candidates[candidateIndex];
+
+      // Create audit log entry
+      const auditEntry = {
+        id: `audit-${Date.now()}`,
+        entityType: 'candidate',
+        entityId: candidateId,
+        action: 'deleted',
+        changes: null,
+        oldValues: deletedCandidate,
+        timestamp: new Date().toISOString(),
+        userId: 'admin-user-id' // In production, get from auth
+      };
+
+      // Initialize audit log if not exists
+      if (!db.audit_log) {
+        db.audit_log = [];
+      }
+      db.audit_log.push(auditEntry);
+      
+      // Remove candidate from database
+      db.candidates.splice(candidateIndex, 1);
+      
+      // Also remove related applications (optional - could keep for audit trail)
+      db.applications = db.applications.filter((app: any) => app.candidateId !== candidateId);
+      
+      return res.status(200).json({
+        success: true,
+        data: deletedCandidate,
+        message: 'Candidate deleted successfully'
+      });
+    } catch (error) {
+      console.error('Error deleting candidate:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to delete candidate'
+      });
+    }
   }
 
   return res.status(405).json({ success: false, error: 'Method not allowed' });

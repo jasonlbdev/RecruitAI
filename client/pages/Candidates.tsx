@@ -28,6 +28,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Table,
   TableBody,
   TableCell,
@@ -54,6 +60,11 @@ import {
   MoreHorizontal,
   MessageCircle,
   UserCheck,
+  Edit,
+  Trash2,
+  Ban,
+  UserMinus,
+  AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -141,6 +152,11 @@ export default function Candidates() {
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [candidateToDelete, setCandidateToDelete] = useState<Candidate | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [sortField, setSortField] = useState<string>('createdAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const { toast } = useToast();
@@ -371,6 +387,169 @@ export default function Candidates() {
   const getSortIcon = (field: string) => {
     if (sortField !== field) return <ArrowUpDown className="h-4 w-4" />;
     return sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />;
+  };
+
+  const handleEditCandidate = (candidate: Candidate) => {
+    // Populate form with candidate data
+    setFormData({
+      firstName: candidate.firstName,
+      lastName: candidate.lastName,
+      email: candidate.email,
+      phone: candidate.phone || '',
+      location: candidate.location || '',
+      currentPosition: candidate.currentPosition || '',
+      currentCompany: candidate.currentCompany || '',
+      yearsOfExperience: candidate.yearsOfExperience?.toString() || '0',
+      summary: candidate.summary || '',
+      skills: Array.isArray(candidate.skills) ? candidate.skills.join(', ') : '',
+      source: candidate.source || 'manual',
+      desiredSalaryMin: candidate.desiredSalaryMin?.toString() || '',
+      desiredSalaryMax: candidate.desiredSalaryMax?.toString() || '',
+      isRemoteOk: candidate.isRemoteOk || false,
+      useAIExtraction: false,
+      jobId: ''
+    });
+    setSelectedCandidate(candidate);
+    setIsEditModalOpen(true);
+  };
+
+  const updateCandidate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCandidate) return;
+    
+    setIsEditing(true);
+
+    try {
+      const candidateData = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        location: formData.location,
+        currentPosition: formData.currentPosition,
+        currentCompany: formData.currentCompany,
+        yearsOfExperience: parseInt(formData.yearsOfExperience) || 0,
+        summary: formData.summary,
+        skills: formData.skills.split(',').map(s => s.trim()).filter(s => s),
+        source: formData.source,
+        desiredSalaryMin: formData.desiredSalaryMin ? parseInt(formData.desiredSalaryMin) : null,
+        desiredSalaryMax: formData.desiredSalaryMax ? parseInt(formData.desiredSalaryMax) : null,
+        isRemoteOk: formData.isRemoteOk
+      };
+
+      const response = await fetch(`/api/candidates/${selectedCandidate.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(candidateData)
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Candidate updated",
+          description: "Candidate information has been updated successfully.",
+        });
+        setIsEditModalOpen(false);
+        setSelectedCandidate(null);
+        resetForm();
+        loadCandidates(); // Reload candidates
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: "Error",
+          description: errorData.error || "Failed to update candidate.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update candidate. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const handleDeleteCandidate = (candidate: Candidate) => {
+    setCandidateToDelete(candidate);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteCandidate = async () => {
+    if (!candidateToDelete) return;
+    
+    setIsDeleting(true);
+
+    try {
+      const response = await fetch(`/api/candidates/${candidateToDelete.id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Candidate deleted",
+          description: `${candidateToDelete.firstName} ${candidateToDelete.lastName} has been deleted successfully.`,
+        });
+        setIsDeleteDialogOpen(false);
+        setCandidateToDelete(null);
+        loadCandidates(); // Reload candidates
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: "Error",
+          description: errorData.error || "Failed to delete candidate.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete candidate. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleBlacklistCandidate = async (candidate: Candidate) => {
+    try {
+      const response = await fetch(`/api/candidates/${candidate.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          ...candidate, 
+          isBlacklisted: !candidate.isBlacklisted,
+          status: candidate.isBlacklisted ? 'active' : 'blacklisted'
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: candidate.isBlacklisted ? "Candidate unblacklisted" : "Candidate blacklisted",
+          description: `${candidate.firstName} ${candidate.lastName} has been ${candidate.isBlacklisted ? 'removed from' : 'added to'} the blacklist.`,
+        });
+        loadCandidates(); // Reload candidates
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: "Error",
+          description: errorData.error || "Failed to update candidate status.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update candidate status. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const sortedCandidates = [...candidates].sort((a, b) => {
@@ -956,14 +1135,47 @@ export default function Candidates() {
                             >
                               <MessageCircle className="h-4 w-4" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              title="More actions"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  title="More actions"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem onClick={() => handleEditCandidate(candidate)}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit Candidate
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handleBlacklistCandidate(candidate)}
+                                  className={candidate.isBlacklisted ? 'text-green-600' : 'text-yellow-600'}
+                                >
+                                  {candidate.isBlacklisted ? (
+                                    <>
+                                      <UserCheck className="mr-2 h-4 w-4" />
+                                      Unblacklist
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Ban className="mr-2 h-4 w-4" />
+                                      Blacklist
+                                    </>
+                                  )}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handleDeleteCandidate(candidate)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete Candidate
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1346,6 +1558,175 @@ export default function Candidates() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Candidate Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Candidate</DialogTitle>
+            <DialogDescription>
+              Update information for "{selectedCandidate?.firstName} {selectedCandidate?.lastName}".
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={updateCandidate} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-firstName">First Name *</Label>
+                <Input
+                  id="edit-firstName"
+                  value={formData.firstName}
+                  onChange={(e) => setFormData({...formData, firstName: e.target.value})}
+                  placeholder="First name"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-lastName">Last Name *</Label>
+                <Input
+                  id="edit-lastName"
+                  value={formData.lastName}
+                  onChange={(e) => setFormData({...formData, lastName: e.target.value})}
+                  placeholder="Last name"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-email">Email *</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  placeholder="email@example.com"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-phone">Phone</Label>
+                <Input
+                  id="edit-phone"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  placeholder="+1 (555) 123-4567"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-location">Location</Label>
+                <Input
+                  id="edit-location"
+                  value={formData.location}
+                  onChange={(e) => setFormData({...formData, location: e.target.value})}
+                  placeholder="City, State"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-yearsOfExperience">Years of Experience</Label>
+                <Input
+                  id="edit-yearsOfExperience"
+                  type="number"
+                  value={formData.yearsOfExperience}
+                  onChange={(e) => setFormData({...formData, yearsOfExperience: e.target.value})}
+                  min="0"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-currentPosition">Current Position</Label>
+                <Input
+                  id="edit-currentPosition"
+                  value={formData.currentPosition}
+                  onChange={(e) => setFormData({...formData, currentPosition: e.target.value})}
+                  placeholder="Software Engineer"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-currentCompany">Current Company</Label>
+                <Input
+                  id="edit-currentCompany"
+                  value={formData.currentCompany}
+                  onChange={(e) => setFormData({...formData, currentCompany: e.target.value})}
+                  placeholder="TechCorp Inc."
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-skills">Skills (comma-separated)</Label>
+              <Textarea
+                id="edit-skills"
+                value={formData.skills}
+                onChange={(e) => setFormData({...formData, skills: e.target.value})}
+                placeholder="JavaScript, React, Node.js, Python"
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-summary">Summary</Label>
+              <Textarea
+                id="edit-summary"
+                value={formData.summary}
+                onChange={(e) => setFormData({...formData, summary: e.target.value})}
+                placeholder="Brief professional summary"
+                rows={3}
+              />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isEditing}>
+                {isEditing ? "Updating..." : "Update Candidate"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              Delete Candidate
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{candidateToDelete?.firstName} {candidateToDelete?.lastName}"? This action cannot be undone.
+              <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
+                Warning: This will permanently remove all candidate data and associated applications.
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="button" 
+              variant="destructive"
+              onClick={confirmDeleteCandidate}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete Candidate"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

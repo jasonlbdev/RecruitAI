@@ -30,6 +30,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Briefcase,
   MapPin,
   Calendar,
@@ -41,6 +47,14 @@ import {
   Filter,
   X,
   FileText,
+  Edit,
+  Trash2,
+  Copy,
+  AlertTriangle,
+  Play,
+  Pause,
+  Archive,
+  MoreHorizontal,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -100,11 +114,18 @@ export default function Jobs() {
   const [isCreating, setIsCreating] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<Job | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [processedResults, setProcessedResults] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState<CreateJobForm>({
@@ -132,6 +153,13 @@ export default function Jobs() {
   useEffect(() => {
     loadJobs();
   }, [searchTerm, statusFilter, departmentFilter]);
+
+  useEffect(() => {
+    // Check for expired jobs when jobs load
+    if (jobs.length > 0) {
+      handleExpiredJobs();
+    }
+  }, [jobs]);
 
   const loadJobs = async () => {
     try {
@@ -229,6 +257,52 @@ export default function Jobs() {
   const handleViewJobDetails = (job: Job) => {
     setSelectedJob(job);
     setIsViewModalOpen(true);
+    loadAuditHistory(job.id);
+  };
+
+  const loadAuditHistory = async (jobId: string) => {
+    setIsLoadingAudit(true);
+    try {
+      const response = await fetch(`/api/audit-log?entityType=job&entityId=${jobId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAuditLogs(data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load audit history:', error);
+    } finally {
+      setIsLoadingAudit(false);
+    }
+  };
+
+  const formatAuditAction = (log: any) => {
+    switch (log.action) {
+      case 'created':
+        return 'Job created';
+      case 'updated':
+        return 'Job updated';
+      case 'deleted':
+        return 'Job deleted';
+      default:
+        return log.action;
+    }
+  };
+
+  const getAuditChanges = (log: any) => {
+    if (log.action === 'created') {
+      return 'Initial job posting created';
+    }
+    if (log.action === 'deleted') {
+      return 'Job posting deleted';
+    }
+    if (log.action === 'updated' && log.changes) {
+      const changes = Object.keys(log.changes)
+        .filter(key => key !== 'updatedAt')
+        .map(key => `${key}: ${JSON.stringify(log.changes[key])}`)
+        .join(', ');
+      return changes || 'No significant changes';
+    }
+    return 'No details available';
   };
 
   const handleViewApplications = (jobId: string) => {
@@ -242,6 +316,213 @@ export default function Jobs() {
     setUploadFiles([]);
     setProcessedResults([]);
     setProcessingProgress(0);
+  };
+
+  const handleEditJob = (job: Job) => {
+    // Populate form with job data
+    setFormData({
+      title: job.title,
+      department: job.department,
+      location: job.location,
+      jobType: job.jobType,
+      employmentType: job.employmentType,
+      salaryMin: job.salaryMin?.toString() || '',
+      salaryMax: job.salaryMax?.toString() || '',
+      description: job.description,
+      requirements: job.requirements.join('\n'),
+      niceToHave: job.niceToHave?.join('\n') || '',
+      deadline: job.deadline || '',
+      isRemote: job.isRemote,
+      experienceLevel: job.experienceLevel,
+      // Default weights if not available
+      experienceWeight: 30,
+      skillsWeight: 30,
+      locationWeight: 15,
+      educationWeight: 15,
+      salaryWeight: 10
+    });
+    setSelectedJob(job);
+    setIsEditModalOpen(true);
+  };
+
+  const updateJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedJob) return;
+    
+    setIsEditing(true);
+
+    try {
+      const jobData = {
+        title: formData.title,
+        department: formData.department,
+        location: formData.location,
+        jobType: formData.jobType,
+        employmentType: formData.employmentType,
+        salaryMin: formData.salaryMin ? parseInt(formData.salaryMin) : undefined,
+        salaryMax: formData.salaryMax ? parseInt(formData.salaryMax) : undefined,
+        description: formData.description,
+        requirements: formData.requirements.split('\n').filter(r => r.trim()),
+        niceToHave: formData.niceToHave ? formData.niceToHave.split('\n').filter(r => r.trim()) : [],
+        deadline: formData.deadline || undefined,
+        isRemote: formData.isRemote,
+        experienceLevel: formData.experienceLevel,
+        scoringWeights: {
+          experience: formData.experienceWeight,
+          skills: formData.skillsWeight,
+          location: formData.locationWeight,
+          education: formData.educationWeight,
+          salary: formData.salaryWeight
+        }
+      };
+
+      const response = await fetch(`/api/jobs/${selectedJob.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(jobData)
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Job updated",
+          description: "Job posting has been updated successfully.",
+        });
+        setIsEditModalOpen(false);
+        setSelectedJob(null);
+        loadJobs(); // Reload jobs
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: "Error",
+          description: errorData.error || "Failed to update job posting.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update job posting. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const handleDeleteJob = (job: Job) => {
+    setJobToDelete(job);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteJob = async () => {
+    if (!jobToDelete) return;
+    
+    setIsDeleting(true);
+
+    try {
+      const response = await fetch(`/api/jobs/${jobToDelete.id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Job deleted",
+          description: `"${jobToDelete.title}" has been deleted successfully.`,
+        });
+        setIsDeleteDialogOpen(false);
+        setJobToDelete(null);
+        loadJobs(); // Reload jobs
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: "Error",
+          description: errorData.error || "Failed to delete job posting.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete job posting. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDuplicateJob = (job: Job) => {
+    // Populate form with job data (without ID to create new)
+    setFormData({
+      title: `${job.title} (Copy)`,
+      department: job.department,
+      location: job.location,
+      jobType: job.jobType,
+      employmentType: job.employmentType,
+      salaryMin: job.salaryMin?.toString() || '',
+      salaryMax: job.salaryMax?.toString() || '',
+      description: job.description,
+      requirements: job.requirements.join('\n'),
+      niceToHave: job.niceToHave?.join('\n') || '',
+      deadline: '',
+      isRemote: job.isRemote,
+      experienceLevel: job.experienceLevel,
+      experienceWeight: 30,
+      skillsWeight: 30,
+      locationWeight: 15,
+      educationWeight: 15,
+      salaryWeight: 10
+    });
+    setIsCreateModalOpen(true);
+  };
+
+  const handleStatusChange = async (job: Job, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/jobs/${job.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ...job, status: newStatus })
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Status updated",
+          description: `"${job.title}" status changed to ${newStatus}.`,
+        });
+        loadJobs(); // Reload jobs
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: "Error",
+          description: errorData.error || "Failed to update job status.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update job status. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'active':
+        return <Play className="h-4 w-4 text-green-600" />;
+      case 'paused':
+        return <Pause className="h-4 w-4 text-yellow-600" />;
+      case 'closed':
+        return <Archive className="h-4 w-4 text-red-600" />;
+      case 'draft':
+        return <FileText className="h-4 w-4 text-gray-600" />;
+      default:
+        return <FileText className="h-4 w-4 text-gray-600" />;
+    }
   };
 
   const handleFilesDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -368,6 +649,45 @@ export default function Jobs() {
     const diffTime = Math.abs(new Date().getTime() - new Date(dateString).getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays === 1 ? '1 day ago' : `${diffDays} days ago`;
+  };
+
+  const getDeadlineStatus = (deadline?: string) => {
+    if (!deadline) return null;
+    
+    const today = new Date();
+    const deadlineDate = new Date(deadline);
+    const diffTime = deadlineDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) {
+      return { status: 'expired', message: `Expired ${Math.abs(diffDays)} days ago`, color: 'text-red-600' };
+    } else if (diffDays === 0) {
+      return { status: 'today', message: 'Expires today', color: 'text-red-600' };
+    } else if (diffDays <= 3) {
+      return { status: 'urgent', message: `Expires in ${diffDays} day${diffDays > 1 ? 's' : ''}`, color: 'text-orange-600' };
+    } else if (diffDays <= 7) {
+      return { status: 'warning', message: `Expires in ${diffDays} days`, color: 'text-yellow-600' };
+    } else {
+      return { status: 'normal', message: `Expires ${formatDate(deadline)}`, color: 'text-gray-600' };
+    }
+  };
+
+  const handleExpiredJobs = async () => {
+    // Auto-close expired jobs
+    const today = new Date();
+    const expiredJobs = jobs.filter(job => 
+      job.deadline && 
+      new Date(job.deadline) < today && 
+      job.status === 'active'
+    );
+
+    for (const job of expiredJobs) {
+      try {
+        await handleStatusChange(job, 'closed');
+      } catch (error) {
+        console.error(`Failed to auto-close expired job ${job.id}:`, error);
+      }
+    }
   };
 
   if (loading) {
@@ -783,9 +1103,44 @@ export default function Jobs() {
                         <span>{job.department}</span>
                       </div>
                     </div>
-                    <Badge className={getStatusColor(job.status)}>
-                      {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge className={getStatusColor(job.status)}>
+                        {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+                      </Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40">
+                          {job.status !== 'active' && (
+                            <DropdownMenuItem onClick={() => handleStatusChange(job, 'active')}>
+                              <Play className="mr-2 h-4 w-4 text-green-600" />
+                              Activate
+                            </DropdownMenuItem>
+                          )}
+                          {job.status !== 'paused' && job.status !== 'draft' && (
+                            <DropdownMenuItem onClick={() => handleStatusChange(job, 'paused')}>
+                              <Pause className="mr-2 h-4 w-4 text-yellow-600" />
+                              Pause
+                            </DropdownMenuItem>
+                          )}
+                          {job.status !== 'closed' && (
+                            <DropdownMenuItem onClick={() => handleStatusChange(job, 'closed')}>
+                              <Archive className="mr-2 h-4 w-4 text-red-600" />
+                              Close
+                            </DropdownMenuItem>
+                          )}
+                          {job.status !== 'draft' && (
+                            <DropdownMenuItem onClick={() => handleStatusChange(job, 'draft')}>
+                              <FileText className="mr-2 h-4 w-4 text-gray-600" />
+                              Move to Draft
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -802,6 +1157,25 @@ export default function Jobs() {
                       <span>Posted {getDaysAgo(job.postedDate)}</span>
                     </div>
                   </div>
+
+                  {job.deadline && (
+                    <div className="flex items-center gap-1 text-sm">
+                      <div className={`flex items-center gap-1 ${getDeadlineStatus(job.deadline)?.color}`}>
+                        <Calendar className="h-4 w-4" />
+                        <span>{getDeadlineStatus(job.deadline)?.message}</span>
+                        {getDeadlineStatus(job.deadline)?.status === 'expired' && (
+                          <Badge variant="destructive" className="text-xs">
+                            EXPIRED
+                          </Badge>
+                        )}
+                        {getDeadlineStatus(job.deadline)?.status === 'urgent' && (
+                          <Badge variant="destructive" className="text-xs bg-orange-100 text-orange-800">
+                            URGENT
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <p className="text-sm text-gray-600 line-clamp-3">
                     {job.description}
@@ -857,6 +1231,39 @@ export default function Jobs() {
                       onClick={() => handleViewApplications(job.id)}
                     >
                       View Applications
+                    </Button>
+                  </div>
+
+                  <div className="flex gap-1 pt-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleEditJob(job)}
+                      className="flex-1"
+                      title="Edit Job"
+                    >
+                      <Edit className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleDuplicateJob(job)}
+                      className="flex-1"
+                      title="Duplicate Job"
+                    >
+                      <Copy className="h-4 w-4 mr-1" />
+                      Copy
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleDeleteJob(job)}
+                      className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      title="Delete Job"
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
                     </Button>
                   </div>
                 </CardContent>
@@ -917,6 +1324,54 @@ export default function Jobs() {
                         ))}
                       </ul>
                     </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Job History */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Job History</CardTitle>
+                  <CardDescription>
+                    Track all changes and updates to this job posting
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoadingAudit ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                      <span className="ml-2 text-gray-600">Loading history...</span>
+                    </div>
+                  ) : auditLogs.length > 0 ? (
+                    <div className="space-y-4 max-h-60 overflow-y-auto">
+                      {auditLogs.map((log, index) => (
+                        <div key={log.id || index} className="flex items-start space-x-3 pb-3 border-b last:border-b-0">
+                          <div className="flex-shrink-0">
+                            <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium text-gray-900">
+                                {formatAuditAction(log)}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {formatDate(log.timestamp)}
+                              </p>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1 break-words">
+                              {getAuditChanges(log)}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              by Admin User
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-600 text-center py-4">
+                      No history available for this job.
+                    </p>
                   )}
                 </CardContent>
               </Card>
@@ -1129,6 +1584,142 @@ export default function Jobs() {
               </Card>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Job Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Job Posting</DialogTitle>
+            <DialogDescription>
+              Update the details for "{selectedJob?.title}".
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={updateJob} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-title">Job Title *</Label>
+                <Input
+                  id="edit-title"
+                  value={formData.title}
+                  onChange={(e) => setFormData({...formData, title: e.target.value})}
+                  placeholder="e.g. Senior React Developer"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-department">Department *</Label>
+                <Select value={formData.department} onValueChange={(value) => setFormData({...formData, department: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Engineering">Engineering</SelectItem>
+                    <SelectItem value="Product">Product</SelectItem>
+                    <SelectItem value="Design">Design</SelectItem>
+                    <SelectItem value="Sales">Sales</SelectItem>
+                    <SelectItem value="Marketing">Marketing</SelectItem>
+                    <SelectItem value="Operations">Operations</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-location">Location</Label>
+                <Input
+                  id="edit-location"
+                  value={formData.location}
+                  onChange={(e) => setFormData({...formData, location: e.target.value})}
+                  placeholder="e.g. San Francisco, CA"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-isRemote">Remote Work</Label>
+                <Select value={formData.isRemote.toString()} onValueChange={(value) => setFormData({...formData, isRemote: value === 'true'})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="false">On-site</SelectItem>
+                    <SelectItem value="true">Remote</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Job Description *</Label>
+              <Textarea
+                id="edit-description"
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                placeholder="Describe the role, responsibilities, and what you're looking for..."
+                rows={4}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-requirements">Requirements (one per line)</Label>
+              <Textarea
+                id="edit-requirements"
+                value={formData.requirements}
+                onChange={(e) => setFormData({...formData, requirements: e.target.value})}
+                placeholder="5+ years React experience&#10;TypeScript proficiency&#10;Experience with testing frameworks"
+                rows={3}
+              />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isEditing}>
+                {isEditing ? "Updating..." : "Update Job"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              Delete Job Posting
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{jobToDelete?.title}"? This action cannot be undone.
+              {jobToDelete?.applications && jobToDelete.applications > 0 && (
+                <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
+                  Warning: This job has {jobToDelete.applications} active application{jobToDelete.applications > 1 ? 's' : ''}.
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="button" 
+              variant="destructive"
+              onClick={confirmDeleteJob}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete Job"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
