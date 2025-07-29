@@ -263,7 +263,7 @@ export default function Jobs() {
   const loadAuditHistory = async (jobId: string) => {
     setIsLoadingAudit(true);
     try {
-      const response = await fetch(`/api/audit-log?entityType=job&entityId=${jobId}`);
+      const response = await fetch(`/api/settings?action=audit-log&entityType=job&entityId=${jobId}`);
       if (response.ok) {
         const data = await response.json();
         setAuditLogs(data.data || []);

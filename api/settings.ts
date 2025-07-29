@@ -48,6 +48,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { action } = req.query;
 
+  // Handle audit log requests
+  if (action === 'audit-log') {
+    if (req.method === 'GET') {
+      try {
+        const db = getMemoryDB();
+        let auditLogs = (db as any).audit_log || [];
+        
+        // Filter by entity type
+        if (req.query.entityType) {
+          auditLogs = auditLogs.filter((log: any) => log.entityType === req.query.entityType);
+        }
+        
+        // Filter by entity ID
+        if (req.query.entityId) {
+          auditLogs = auditLogs.filter((log: any) => log.entityId === req.query.entityId);
+        }
+        
+        // Sort by timestamp (newest first)
+        auditLogs.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        
+        return res.status(200).json({
+          success: true,
+          data: auditLogs
+        });
+      } catch (error) {
+        console.error('Error fetching audit logs:', error);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to fetch audit logs'
+        });
+      }
+    }
+    return res.status(405).json({ success: false, error: 'Method not allowed for audit logs' });
+  }
+
   try {
     switch (action) {
       case 'system':
