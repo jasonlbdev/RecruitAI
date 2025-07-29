@@ -28,7 +28,10 @@ import {
   Filter,
   Plus,
   ArrowRight,
+  GripVertical,
+  Clock,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface Candidate {
   id: string;
@@ -60,6 +63,9 @@ export default function Pipeline() {
   const [selectedStage, setSelectedStage] = useState("all");
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [draggedCandidate, setDraggedCandidate] = useState<Candidate | null>(null);
+  const [draggedFromStage, setDraggedFromStage] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadPipelineData();
@@ -133,6 +139,103 @@ export default function Pipeline() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDragStart = (e: React.DragEvent, candidate: Candidate, fromStageId: string) => {
+    setDraggedCandidate(candidate);
+    setDraggedFromStage(fromStageId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, toStageId: string) => {
+    e.preventDefault();
+    
+    if (!draggedCandidate || !draggedFromStage || draggedFromStage === toStageId) {
+      setDraggedCandidate(null);
+      setDraggedFromStage(null);
+      return;
+    }
+
+    try {
+      // Update application status via API
+      const response = await fetch(`/api/applications/${draggedCandidate.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          status: toStageId,
+          stage: getStageDisplayName(toStageId),
+          updatedAt: new Date().toISOString()
+        })
+      });
+
+      if (response.ok) {
+        // Update local state
+        setPipelineData(prevStages => {
+          const newStages = prevStages.map(stage => {
+            if (stage.id === draggedFromStage) {
+              return {
+                ...stage,
+                candidates: stage.candidates.filter(c => c.id !== draggedCandidate.id),
+                count: stage.candidates.length - 1
+              };
+            }
+            if (stage.id === toStageId) {
+              return {
+                ...stage,
+                candidates: [...stage.candidates, draggedCandidate],
+                count: stage.candidates.length + 1
+              };
+            }
+            return stage;
+          });
+          return newStages;
+        });
+
+        toast({
+          title: "Candidate moved",
+          description: `${draggedCandidate.name} moved to ${getStageDisplayName(toStageId)}.`,
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to move candidate. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error moving candidate:', error);
+      toast({
+        title: "Error",
+        description: "Failed to move candidate. Please try again.",
+        variant: "destructive",
+      });
+    }
+
+    setDraggedCandidate(null);
+    setDraggedFromStage(null);
+  };
+
+  const getStageDisplayName = (stageId: string) => {
+    const stageNames: Record<string, string> = {
+      new: "New Applications",
+      reviewing: "Under Review", 
+      interview: "Interview Stage",
+      offer: "Offer Extended",
+      hired: "Hired"
+    };
+    return stageNames[stageId] || stageId;
+  };
+
+  const handleDragEnd = () => {
+    setDraggedCandidate(null);
+    setDraggedFromStage(null);
   };
 
   const filteredStages = pipelineData.map(stage => ({
@@ -263,29 +366,58 @@ export default function Pipeline() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             {filteredStages.map((stage, index) => (
-              <Card key={stage.id} className={`${stage.color} border-2`}>
+              <Card 
+                key={stage.id} 
+                className={`${stage.color} border-2 min-h-[400px]`}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, stage.id)}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{stage.title}</CardTitle>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      {stage.title}
+                      <Clock className="h-4 w-4 text-gray-500" />
+                    </CardTitle>
                     <Badge variant="secondary" className="bg-white/50">
                       {stage.candidates.length}
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-3 pb-4">
                   {stage.candidates.length === 0 ? (
-                    <div className="text-center py-8">
-                      <div className="text-gray-500 text-sm">No candidates</div>
+                    <div className={`text-center py-8 rounded-lg border-2 border-dashed transition-colors ${
+                      draggedCandidate && draggedFromStage !== stage.id
+                        ? 'border-blue-300 bg-blue-50 text-blue-600'
+                        : 'border-gray-200 text-gray-500'
+                    }`}>
+                      <div className="text-sm">
+                        {draggedCandidate && draggedFromStage !== stage.id 
+                          ? 'Drop here to move candidate' 
+                          : 'No candidates'}
+                      </div>
                     </div>
                   ) : (
                     stage.candidates.map((candidate) => (
-                      <Card key={candidate.id} className="bg-white shadow-sm hover:shadow-md transition-shadow">
+                      <Card 
+                        key={candidate.id} 
+                        className={`bg-white shadow-sm hover:shadow-md transition-all cursor-move border ${
+                          draggedCandidate?.id === candidate.id 
+                            ? 'opacity-50 transform rotate-2 shadow-lg' 
+                            : 'hover:shadow-lg'
+                        }`}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, candidate, stage.id)}
+                        onDragEnd={handleDragEnd}
+                      >
                         <CardContent className="p-4">
                           <div className="space-y-3">
                             <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <h4 className="font-medium text-sm">{candidate.name}</h4>
-                                <p className="text-xs text-gray-600 mt-1">{candidate.position}</p>
+                              <div className="flex items-center gap-2 flex-1">
+                                <GripVertical className="h-4 w-4 text-gray-400 drag-handle" />
+                                <div className="flex-1">
+                                  <h4 className="font-medium text-sm">{candidate.name}</h4>
+                                  <p className="text-xs text-gray-600 mt-1">{candidate.position}</p>
+                                </div>
                               </div>
                               {candidate.aiScore > 0 && (
                                 <Badge variant="outline" className="text-xs">
