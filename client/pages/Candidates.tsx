@@ -484,348 +484,10 @@ export default function Candidates() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
             <p className="text-gray-600">Loading candidates...</p>
           </div>
-              </div>
-
-      {/* Candidate Detail Modal */}
-      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {selectedCandidate?.firstName} {selectedCandidate?.lastName}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedCandidate?.currentPosition} at {selectedCandidate?.currentCompany}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedCandidate && (
-            <div className="space-y-6">
-              {/* AI Analysis Summary */}
-              {selectedCandidate.aiAnalysisSummary && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5 text-green-600" />
-                      AI Analysis Summary
-                      <Badge variant="outline" className="ml-auto">
-                        AI Score: {selectedCandidate.aiScore || 0}/100
-                      </Badge>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-gray-700">{selectedCandidate.aiAnalysisSummary}</p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Match Criteria Breakdown */}
-              {selectedCandidate.aiScores && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Match Criteria Breakdown</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {selectedCandidate.aiScores.skills !== undefined && (
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="font-medium text-green-600">Skills Match</span>
-                            <span className="font-semibold text-green-600">{selectedCandidate.aiScores.skills}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-3">
-                            <div 
-                              className="h-3 rounded-full bg-green-500" 
-                              style={{ width: `${Math.min(100, selectedCandidate.aiScores.skills)}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                      
-                      {selectedCandidate.aiScores.experience !== undefined && (
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="font-medium text-blue-600">Experience</span>
-                            <span className="font-semibold text-blue-600">{selectedCandidate.aiScores.experience}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-3">
-                            <div 
-                              className="h-3 rounded-full bg-blue-500" 
-                              style={{ width: `${Math.min(100, selectedCandidate.aiScores.experience)}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                      
-                      {selectedCandidate.aiScores.education !== undefined && (
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="font-medium text-purple-600">Education</span>
-                            <span className="font-semibold text-purple-600">{selectedCandidate.aiScores.education}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-3">
-                            <div 
-                              className="h-3 rounded-full bg-purple-500" 
-                              style={{ width: `${Math.min(100, selectedCandidate.aiScores.education)}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                      
-                      {selectedCandidate.aiScores.location !== undefined && (
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="font-medium text-orange-600">Location</span>
-                            <span className="font-semibold text-orange-600">{selectedCandidate.aiScores.location}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-3">
-                            <div 
-                              className="h-3 rounded-full bg-orange-500" 
-                              style={{ width: `${Math.min(100, selectedCandidate.aiScores.location)}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Contact Information */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Contact Information</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-gray-500" />
-                      <span>{selectedCandidate.email}</span>
-                    </div>
-                    {selectedCandidate.phone && (
-                      <div className="flex items-center gap-2">
-                        <Phone className="h-4 w-4 text-gray-500" />
-                        <span>{selectedCandidate.phone}</span>
-                      </div>
-                    )}
-                    {selectedCandidate.location && (
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-gray-500" />
-                        <span>{selectedCandidate.location}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-gray-500" />
-                      <span>Applied {formatDate(selectedCandidate.createdAt)}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Professional Information */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Professional Background</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label className="font-medium">Current Position</Label>
-                      <p className="text-gray-700">{selectedCandidate.currentPosition || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <Label className="font-medium">Current Company</Label>
-                      <p className="text-gray-700">{selectedCandidate.currentCompany || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <Label className="font-medium">Years of Experience</Label>
-                      <p className="text-gray-700">{selectedCandidate.yearsOfExperience || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <Label className="font-medium">Source</Label>
-                      <Badge variant="outline">{selectedCandidate.source}</Badge>
-                    </div>
-                  </div>
-                  
-                  {selectedCandidate.summary && (
-                    <div>
-                      <Label className="font-medium">Professional Summary</Label>
-                      <p className="text-gray-700 mt-1">{selectedCandidate.summary}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Skills & Technologies */}
-              {(selectedCandidate.skills || selectedCandidate.skillsDetailed) && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Skills & Technologies</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Organized Skills Categories */}
-                    {selectedCandidate.skillsDetailed && (
-                      <div className="space-y-4">
-                        {selectedCandidate.skillsDetailed.programmingLanguages && selectedCandidate.skillsDetailed.programmingLanguages.length > 0 && (
-                          <div>
-                            <h4 className="font-medium text-sm text-gray-600 mb-2">Programming Languages</h4>
-                            <div className="flex flex-wrap gap-2">
-                              {selectedCandidate.skillsDetailed.programmingLanguages.map((skill, index) => (
-                                <Badge key={index} variant="default" className="bg-blue-100 text-blue-800 hover:bg-blue-200">
-                                  {skill}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {selectedCandidate.skillsDetailed.frameworks && selectedCandidate.skillsDetailed.frameworks.length > 0 && (
-                          <div>
-                            <h4 className="font-medium text-sm text-gray-600 mb-2">Frameworks & Libraries</h4>
-                            <div className="flex flex-wrap gap-2">
-                              {selectedCandidate.skillsDetailed.frameworks.map((skill, index) => (
-                                <Badge key={index} variant="default" className="bg-green-100 text-green-800 hover:bg-green-200">
-                                  {skill}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {selectedCandidate.skillsDetailed.tools && selectedCandidate.skillsDetailed.tools.length > 0 && (
-                          <div>
-                            <h4 className="font-medium text-sm text-gray-600 mb-2">Tools & Platforms</h4>
-                            <div className="flex flex-wrap gap-2">
-                              {selectedCandidate.skillsDetailed.tools.map((skill, index) => (
-                                <Badge key={index} variant="default" className="bg-purple-100 text-purple-800 hover:bg-purple-200">
-                                  {skill}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {selectedCandidate.skillsDetailed.databases && selectedCandidate.skillsDetailed.databases.length > 0 && (
-                          <div>
-                            <h4 className="font-medium text-sm text-gray-600 mb-2">Databases</h4>
-                            <div className="flex flex-wrap gap-2">
-                              {selectedCandidate.skillsDetailed.databases.map((skill, index) => (
-                                <Badge key={index} variant="default" className="bg-orange-100 text-orange-800 hover:bg-orange-200">
-                                  {skill}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {selectedCandidate.skillsDetailed.softSkills && selectedCandidate.skillsDetailed.softSkills.length > 0 && (
-                          <div>
-                            <h4 className="font-medium text-sm text-gray-600 mb-2">Soft Skills</h4>
-                            <div className="flex flex-wrap gap-2">
-                              {selectedCandidate.skillsDetailed.softSkills.map((skill, index) => (
-                                <Badge key={index} variant="outline" className="border-gray-300">
-                                  {skill}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {selectedCandidate.skillsDetailed.certifications && selectedCandidate.skillsDetailed.certifications.length > 0 && (
-                          <div>
-                            <h4 className="font-medium text-sm text-gray-600 mb-2">Certifications</h4>
-                            <div className="flex flex-wrap gap-2">
-                              {selectedCandidate.skillsDetailed.certifications.map((skill, index) => (
-                                <Badge key={index} variant="default" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">
-                                  {skill}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    
-                    {/* Fallback to simple skills list if detailed skills not available */}
-                    {!selectedCandidate.skillsDetailed && selectedCandidate.skills && selectedCandidate.skills.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {selectedCandidate.skills.map((skill, index) => (
-                          <Badge key={index} variant="secondary">
-                            {skill}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Salary Expectations */}
-              {(selectedCandidate.desiredSalaryMin || selectedCandidate.desiredSalaryMax) && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Salary Expectations</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-lg font-medium text-green-600">
-                      {formatSalary(selectedCandidate.desiredSalaryMin, selectedCandidate.desiredSalaryMax)}
-                    </p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Remote work: {selectedCandidate.isRemoteOk ? 'Yes' : 'No'}
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-4 border-t">
-                {selectedCandidate.resumeFilePath && (
-                  <Button 
-                    variant="outline"
-                    onClick={() => window.open(selectedCandidate.resumeFilePath, '_blank')}
-                    className="flex-1"
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    Download Resume
-                  </Button>
-                )}
-                <Button 
-                  variant="destructive"
-                  onClick={() => {
-                    // Handle reject logic here
-                    toast({
-                      title: "Candidate Rejected",
-                      description: `${selectedCandidate.firstName} ${selectedCandidate.lastName} has been rejected.`,
-                      variant: "destructive"
-                    });
-                    setIsViewModalOpen(false);
-                  }}
-                  className="flex-1"
-                >
-                  <UserCheck className="h-4 w-4 mr-2" />
-                  Reject
-                </Button>
-                <Button 
-                  onClick={() => {
-                    // Handle move to interview logic here
-                    toast({
-                      title: "Moved to Interview",
-                      description: `${selectedCandidate.firstName} ${selectedCandidate.lastName} has been moved to interview stage.`,
-                    });
-                    setIsViewModalOpen(false);
-                  }}
-                  className="flex-1"
-                >
-                  <UserCheck className="h-4 w-4 mr-2" />
-                  Move to Interview
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 bg-gray-50">
@@ -1348,6 +1010,344 @@ export default function Candidates() {
           </Card>
         )}
       </div>
+
+      {/* Candidate Detail Modal */}
+      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedCandidate?.firstName} {selectedCandidate?.lastName}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedCandidate?.currentPosition} at {selectedCandidate?.currentCompany}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedCandidate && (
+            <div className="space-y-6">
+              {/* AI Analysis Summary */}
+              {selectedCandidate.aiAnalysisSummary && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-green-600" />
+                      AI Analysis Summary
+                      <Badge variant="outline" className="ml-auto">
+                        AI Score: {selectedCandidate.aiScore || 0}/100
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-700">{selectedCandidate.aiAnalysisSummary}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Match Criteria Breakdown */}
+              {selectedCandidate.aiScores && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Match Criteria Breakdown</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {selectedCandidate.aiScores.skills !== undefined && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium text-green-600">Skills Match</span>
+                            <span className="font-semibold text-green-600">{selectedCandidate.aiScores.skills}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="h-3 rounded-full bg-green-500" 
+                              style={{ width: `${Math.min(100, selectedCandidate.aiScores.skills)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {selectedCandidate.aiScores.experience !== undefined && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium text-blue-600">Experience</span>
+                            <span className="font-semibold text-blue-600">{selectedCandidate.aiScores.experience}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="h-3 rounded-full bg-blue-500" 
+                              style={{ width: `${Math.min(100, selectedCandidate.aiScores.experience)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {selectedCandidate.aiScores.education !== undefined && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium text-purple-600">Education</span>
+                            <span className="font-semibold text-purple-600">{selectedCandidate.aiScores.education}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="h-3 rounded-full bg-purple-500" 
+                              style={{ width: `${Math.min(100, selectedCandidate.aiScores.education)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {selectedCandidate.aiScores.location !== undefined && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium text-orange-600">Location</span>
+                            <span className="font-semibold text-orange-600">{selectedCandidate.aiScores.location}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="h-3 rounded-full bg-orange-500" 
+                              style={{ width: `${Math.min(100, selectedCandidate.aiScores.location)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Contact Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Contact Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-gray-500" />
+                      <span>{selectedCandidate.email}</span>
+                    </div>
+                    {selectedCandidate.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-gray-500" />
+                        <span>{selectedCandidate.phone}</span>
+                      </div>
+                    )}
+                    {selectedCandidate.location && (
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-gray-500" />
+                        <span>{selectedCandidate.location}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-gray-500" />
+                      <span>Applied {formatDate(selectedCandidate.createdAt)}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Professional Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Professional Background</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="font-medium">Current Position</Label>
+                      <p className="text-gray-700">{selectedCandidate.currentPosition || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <Label className="font-medium">Current Company</Label>
+                      <p className="text-gray-700">{selectedCandidate.currentCompany || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <Label className="font-medium">Years of Experience</Label>
+                      <p className="text-gray-700">{selectedCandidate.yearsOfExperience || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <Label className="font-medium">Source</Label>
+                      <Badge variant="outline">{selectedCandidate.source}</Badge>
+                    </div>
+                  </div>
+                  
+                  {selectedCandidate.summary && (
+                    <div>
+                      <Label className="font-medium">Professional Summary</Label>
+                      <p className="text-gray-700 mt-1">{selectedCandidate.summary}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Skills & Technologies */}
+              {(selectedCandidate.skills || selectedCandidate.skillsDetailed) && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Skills & Technologies</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Organized Skills Categories */}
+                    {selectedCandidate.skillsDetailed && (
+                      <div className="space-y-4">
+                        {selectedCandidate.skillsDetailed.programmingLanguages && selectedCandidate.skillsDetailed.programmingLanguages.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-sm text-gray-600 mb-2">Programming Languages</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCandidate.skillsDetailed.programmingLanguages.map((skill, index) => (
+                                <Badge key={index} variant="default" className="bg-blue-100 text-blue-800 hover:bg-blue-200">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedCandidate.skillsDetailed.frameworks && selectedCandidate.skillsDetailed.frameworks.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-sm text-gray-600 mb-2">Frameworks & Libraries</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCandidate.skillsDetailed.frameworks.map((skill, index) => (
+                                <Badge key={index} variant="default" className="bg-green-100 text-green-800 hover:bg-green-200">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedCandidate.skillsDetailed.tools && selectedCandidate.skillsDetailed.tools.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-sm text-gray-600 mb-2">Tools & Platforms</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCandidate.skillsDetailed.tools.map((skill, index) => (
+                                <Badge key={index} variant="default" className="bg-purple-100 text-purple-800 hover:bg-purple-200">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedCandidate.skillsDetailed.databases && selectedCandidate.skillsDetailed.databases.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-sm text-gray-600 mb-2">Databases</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCandidate.skillsDetailed.databases.map((skill, index) => (
+                                <Badge key={index} variant="default" className="bg-orange-100 text-orange-800 hover:bg-orange-200">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedCandidate.skillsDetailed.softSkills && selectedCandidate.skillsDetailed.softSkills.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-sm text-gray-600 mb-2">Soft Skills</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCandidate.skillsDetailed.softSkills.map((skill, index) => (
+                                <Badge key={index} variant="outline" className="border-gray-300">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedCandidate.skillsDetailed.certifications && selectedCandidate.skillsDetailed.certifications.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-sm text-gray-600 mb-2">Certifications</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCandidate.skillsDetailed.certifications.map((skill, index) => (
+                                <Badge key={index} variant="default" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Fallback to simple skills list if detailed skills not available */}
+                    {!selectedCandidate.skillsDetailed && selectedCandidate.skills && selectedCandidate.skills.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedCandidate.skills.map((skill, index) => (
+                          <Badge key={index} variant="secondary">
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Salary Expectations */}
+              {(selectedCandidate.desiredSalaryMin || selectedCandidate.desiredSalaryMax) && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Salary Expectations</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-lg font-medium text-green-600">
+                      {formatSalary(selectedCandidate.desiredSalaryMin, selectedCandidate.desiredSalaryMax)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Remote work: {selectedCandidate.isRemoteOk ? 'Yes' : 'No'}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 border-t">
+                {selectedCandidate.resumeFilePath && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => window.open(selectedCandidate.resumeFilePath, '_blank')}
+                    className="flex-1"
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    Download Resume
+                  </Button>
+                )}
+                <Button 
+                  variant="destructive"
+                  onClick={() => {
+                    // Handle reject logic here
+                    toast({
+                      title: "Candidate Rejected",
+                      description: `${selectedCandidate.firstName} ${selectedCandidate.lastName} has been rejected.`,
+                      variant: "destructive"
+                    });
+                    setIsViewModalOpen(false);
+                  }}
+                  className="flex-1"
+                >
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Reject
+                </Button>
+                <Button 
+                  onClick={() => {
+                    // Handle move to interview logic here
+                    toast({
+                      title: "Moved to Interview",
+                      description: `${selectedCandidate.firstName} ${selectedCandidate.lastName} has been moved to interview stage.`,
+                    });
+                    setIsViewModalOpen(false);
+                  }}
+                  className="flex-1"
+                >
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Move to Interview
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
