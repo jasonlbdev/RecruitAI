@@ -67,13 +67,44 @@ IMPORTANT: Please extract the following information and return it as a JSON obje
   "currentPosition": "current job title",
   "currentCompany": "current company",
   "yearsOfExperience": "estimated years as number",
-  "skills": ["skill1", "skill2", "skill3"],
+  "skills": {
+    "programmingLanguages": ["JavaScript", "Python", "etc"],
+    "frameworks": ["React", "Node.js", "etc"],
+    "tools": ["AWS", "Docker", "etc"],
+    "databases": ["PostgreSQL", "MongoDB", "etc"],
+    "softSkills": ["Leadership", "Communication", "etc"],
+    "certifications": ["AWS Certified", "PMP", "etc"],
+    "allSkills": ["comprehensive list of all skills found"]
+  },
   "summary": "professional summary",
-  "education": "highest education",
+  "education": {
+    "degree": "highest degree",
+    "institution": "university/school name", 
+    "graduationYear": "year if found",
+    "gpa": "if mentioned"
+  },
+  "workExperience": [
+    {
+      "company": "company name",
+      "position": "job title", 
+      "duration": "time period",
+      "achievements": ["key achievement 1", "key achievement 2"]
+    }
+  ],
   "overallScore": "score 0-100 for job match",
   "keyStrengths": ["strength1", "strength2"],
   "concerns": ["concern1", "concern2"],
-  "recommendation": "STRONG_MATCH, GOOD_MATCH, POTENTIAL_MATCH, or POOR_MATCH"
+  "recommendation": "STRONG_MATCH, GOOD_MATCH, POTENTIAL_MATCH, or POOR_MATCH",
+  "experienceScore": "0-100 score for experience match",
+  "skillsScore": "0-100 score for skills match", 
+  "locationScore": "0-100 score for location preference",
+  "educationScore": "0-100 score for education background",
+  "salaryScore": "0-100 score for salary expectations",
+  "biasDetection": {
+    "potentialBias": ["any potential bias indicators"],
+    "diversityNotes": "notes on diversity considerations"
+  },
+  "aiAnalysisSummary": "comprehensive 2-3 sentence summary of candidate fit"
 }
 
 Resume Content:
@@ -154,7 +185,11 @@ ${fileContent}`;
       currentCompany: extractedData.currentCompany || '',
       yearsOfExperience: parseInt(extractedData.yearsOfExperience) || 0,
       summary: extractedData.summary || '',
-      skills: Array.isArray(extractedData.skills) ? extractedData.skills : [],
+      skills: extractedData.skills?.allSkills || 
+              (Array.isArray(extractedData.skills) ? extractedData.skills : []),
+      skillsDetailed: extractedData.skills || {},
+      education: extractedData.education || {},
+      workExperience: extractedData.workExperience || [],
       source: 'resume_upload',
       status: 'active',
       isRemoteOk: false,
@@ -163,7 +198,19 @@ ${fileContent}`;
       resumeText: fileContent,
       aiScore: extractedData.overallScore || 0,
       aiAnalysis: aiResponse,
+      aiAnalysisSummary: extractedData.aiAnalysisSummary || '',
       aiRecommendation: extractedData.recommendation || 'REQUIRES_REVIEW',
+      aiScores: {
+        overall: extractedData.overallScore || 0,
+        experience: extractedData.experienceScore || 0,
+        skills: extractedData.skillsScore || 0,
+        location: extractedData.locationScore || 0,
+        education: extractedData.educationScore || 0,
+        salary: extractedData.salaryScore || 0
+      },
+      keyStrengths: extractedData.keyStrengths || [],
+      concerns: extractedData.concerns || [],
+      biasDetection: extractedData.biasDetection || {},
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

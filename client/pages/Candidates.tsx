@@ -28,6 +28,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Users,
   Search,
   Filter,
@@ -40,6 +48,12 @@ import {
   TrendingUp,
   ExternalLink,
   Star,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  MoreHorizontal,
+  MessageCircle,
+  UserCheck,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -61,13 +75,36 @@ interface Candidate {
   desiredSalaryMin?: number;
   desiredSalaryMax?: number;
   skills?: string[];
-  education?: any[];
+  skillsDetailed?: {
+    programmingLanguages?: string[];
+    frameworks?: string[];
+    tools?: string[];
+    databases?: string[];
+    softSkills?: string[];
+    certifications?: string[];
+    allSkills?: string[];
+  };
+  education?: any;
   workExperience?: any[];
-  source: "manual" | "linkedin" | "indeed" | "referral" | "company-website" | "other";
+  source: "manual" | "linkedin" | "indeed" | "referral" | "company-website" | "other" | "resume_upload" | "bulk_upload";
   status: "active" | "inactive" | "hired" | "withdrawn";
   isRemoteOk: boolean;
   isBlacklisted: boolean;
   notes?: string;
+  aiScore?: number;
+  aiAnalysisSummary?: string;
+  aiRecommendation?: string;
+  aiScores?: {
+    overall?: number;
+    experience?: number;
+    skills?: number;
+    location?: number;
+    education?: number;
+    salary?: number;
+  };
+  keyStrengths?: string[];
+  concerns?: string[];
+  biasDetection?: any;
   createdAt: string;
   updatedAt: string;
 }
@@ -104,6 +141,8 @@ export default function Candidates() {
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [sortField, setSortField] = useState<string>('createdAt');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const { toast } = useToast();
 
   const [formData, setFormData] = useState<CreateCandidateForm>({
@@ -320,6 +359,94 @@ export default function Candidates() {
     window.location.href = `mailto:${candidate.email}?subject=${emailSubject}&body=${emailBody}`;
   };
 
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (field: string) => {
+    if (sortField !== field) return <ArrowUpDown className="h-4 w-4" />;
+    return sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />;
+  };
+
+  const sortedCandidates = [...candidates].sort((a, b) => {
+    let aValue: any, bValue: any;
+    
+    switch (sortField) {
+      case 'name':
+        aValue = `${a.firstName} ${a.lastName}`.toLowerCase();
+        bValue = `${b.firstName} ${b.lastName}`.toLowerCase();
+        break;
+      case 'position':
+        aValue = (a.currentPosition || '').toLowerCase();
+        bValue = (b.currentPosition || '').toLowerCase();
+        break;
+      case 'aiScore':
+        aValue = a.aiScore || 0;
+        bValue = b.aiScore || 0;
+        break;
+      case 'experience':
+        aValue = a.yearsOfExperience || 0;
+        bValue = b.yearsOfExperience || 0;
+        break;
+      case 'createdAt':
+        aValue = new Date(a.createdAt).getTime();
+        bValue = new Date(b.createdAt).getTime();
+        break;
+      default:
+        aValue = a[sortField] || '';
+        bValue = b[sortField] || '';
+    }
+
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return sortDirection === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+    }
+    
+    if (sortDirection === 'asc') {
+      return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+    } else {
+      return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+    }
+  });
+
+  const getStatusBadge = (candidate: Candidate) => {
+    if (candidate.isBlacklisted) return { text: 'Blacklisted', variant: 'destructive' as const };
+    if (candidate.status === 'hired') return { text: 'Hired', variant: 'default' as const };
+    if (candidate.status === 'withdrawn') return { text: 'Withdrawn', variant: 'secondary' as const };
+    if (candidate.aiRecommendation === 'STRONG_MATCH') return { text: 'Interview', variant: 'default' as const };
+    if (candidate.aiRecommendation === 'GOOD_MATCH') return { text: 'Reviewing', variant: 'secondary' as const };
+    if (candidate.aiRecommendation === 'POTENTIAL_MATCH') return { text: 'Offer', variant: 'outline' as const };
+    return { text: 'New', variant: 'outline' as const };
+  };
+
+  const getScoreColor = (score: number) => {
+    if (score >= 90) return 'text-green-600';
+    if (score >= 80) return 'text-blue-600';
+    if (score >= 70) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const getMatchScoreBar = (score: number) => {
+    const percentage = Math.min(100, Math.max(0, score));
+    let colorClass = 'bg-red-500';
+    if (percentage >= 90) colorClass = 'bg-green-500';
+    else if (percentage >= 80) colorClass = 'bg-blue-500';
+    else if (percentage >= 70) colorClass = 'bg-yellow-500';
+    
+    return (
+      <div className="w-full bg-gray-200 rounded-full h-2">
+        <div 
+          className={`h-2 rounded-full ${colorClass}`} 
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+    );
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -373,6 +500,96 @@ export default function Candidates() {
           
           {selectedCandidate && (
             <div className="space-y-6">
+              {/* AI Analysis Summary */}
+              {selectedCandidate.aiAnalysisSummary && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-green-600" />
+                      AI Analysis Summary
+                      <Badge variant="outline" className="ml-auto">
+                        AI Score: {selectedCandidate.aiScore || 0}/100
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-700">{selectedCandidate.aiAnalysisSummary}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Match Criteria Breakdown */}
+              {selectedCandidate.aiScores && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Match Criteria Breakdown</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {selectedCandidate.aiScores.skills !== undefined && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium text-green-600">Skills Match</span>
+                            <span className="font-semibold text-green-600">{selectedCandidate.aiScores.skills}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="h-3 rounded-full bg-green-500" 
+                              style={{ width: `${Math.min(100, selectedCandidate.aiScores.skills)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {selectedCandidate.aiScores.experience !== undefined && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium text-blue-600">Experience</span>
+                            <span className="font-semibold text-blue-600">{selectedCandidate.aiScores.experience}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="h-3 rounded-full bg-blue-500" 
+                              style={{ width: `${Math.min(100, selectedCandidate.aiScores.experience)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {selectedCandidate.aiScores.education !== undefined && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium text-purple-600">Education</span>
+                            <span className="font-semibold text-purple-600">{selectedCandidate.aiScores.education}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="h-3 rounded-full bg-purple-500" 
+                              style={{ width: `${Math.min(100, selectedCandidate.aiScores.education)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {selectedCandidate.aiScores.location !== undefined && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium text-orange-600">Location</span>
+                            <span className="font-semibold text-orange-600">{selectedCandidate.aiScores.location}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="h-3 rounded-full bg-orange-500" 
+                              style={{ width: `${Math.min(100, selectedCandidate.aiScores.location)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Contact Information */}
               <Card>
                 <CardHeader>
@@ -438,20 +655,106 @@ export default function Candidates() {
                 </CardContent>
               </Card>
 
-              {/* Skills */}
-              {selectedCandidate.skills && selectedCandidate.skills.length > 0 && (
+              {/* Skills & Technologies */}
+              {(selectedCandidate.skills || selectedCandidate.skillsDetailed) && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Skills</CardTitle>
+                    <CardTitle className="text-lg">Skills & Technologies</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedCandidate.skills.map((skill, index) => (
-                        <Badge key={index} variant="secondary">
-                          {skill}
-                        </Badge>
-                      ))}
-                    </div>
+                  <CardContent className="space-y-4">
+                    {/* Organized Skills Categories */}
+                    {selectedCandidate.skillsDetailed && (
+                      <div className="space-y-4">
+                        {selectedCandidate.skillsDetailed.programmingLanguages && selectedCandidate.skillsDetailed.programmingLanguages.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-sm text-gray-600 mb-2">Programming Languages</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCandidate.skillsDetailed.programmingLanguages.map((skill, index) => (
+                                <Badge key={index} variant="default" className="bg-blue-100 text-blue-800 hover:bg-blue-200">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedCandidate.skillsDetailed.frameworks && selectedCandidate.skillsDetailed.frameworks.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-sm text-gray-600 mb-2">Frameworks & Libraries</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCandidate.skillsDetailed.frameworks.map((skill, index) => (
+                                <Badge key={index} variant="default" className="bg-green-100 text-green-800 hover:bg-green-200">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedCandidate.skillsDetailed.tools && selectedCandidate.skillsDetailed.tools.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-sm text-gray-600 mb-2">Tools & Platforms</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCandidate.skillsDetailed.tools.map((skill, index) => (
+                                <Badge key={index} variant="default" className="bg-purple-100 text-purple-800 hover:bg-purple-200">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedCandidate.skillsDetailed.databases && selectedCandidate.skillsDetailed.databases.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-sm text-gray-600 mb-2">Databases</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCandidate.skillsDetailed.databases.map((skill, index) => (
+                                <Badge key={index} variant="default" className="bg-orange-100 text-orange-800 hover:bg-orange-200">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedCandidate.skillsDetailed.softSkills && selectedCandidate.skillsDetailed.softSkills.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-sm text-gray-600 mb-2">Soft Skills</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCandidate.skillsDetailed.softSkills.map((skill, index) => (
+                                <Badge key={index} variant="outline" className="border-gray-300">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedCandidate.skillsDetailed.certifications && selectedCandidate.skillsDetailed.certifications.length > 0 && (
+                          <div>
+                            <h4 className="font-medium text-sm text-gray-600 mb-2">Certifications</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedCandidate.skillsDetailed.certifications.map((skill, index) => (
+                                <Badge key={index} variant="default" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Fallback to simple skills list if detailed skills not available */}
+                    {!selectedCandidate.skillsDetailed && selectedCandidate.skills && selectedCandidate.skills.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedCandidate.skills.map((skill, index) => (
+                          <Badge key={index} variant="secondary">
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -475,30 +778,46 @@ export default function Candidates() {
 
               {/* Actions */}
               <div className="flex gap-3 pt-4 border-t">
-                <Button 
-                  onClick={() => handleContactCandidate(selectedCandidate)}
-                  className="flex-1"
-                >
-                  <Mail className="h-4 w-4 mr-2" />
-                  Contact Candidate
-                </Button>
-                {selectedCandidate.linkedinUrl && (
-                  <Button 
-                    variant="outline"
-                    onClick={() => window.open(selectedCandidate.linkedinUrl, '_blank')}
-                  >
-                    LinkedIn Profile
-                  </Button>
-                )}
                 {selectedCandidate.resumeFilePath && (
                   <Button 
                     variant="outline"
                     onClick={() => window.open(selectedCandidate.resumeFilePath, '_blank')}
+                    className="flex-1"
                   >
                     <Eye className="h-4 w-4 mr-2" />
-                    View Resume
+                    Download Resume
                   </Button>
                 )}
+                <Button 
+                  variant="destructive"
+                  onClick={() => {
+                    // Handle reject logic here
+                    toast({
+                      title: "Candidate Rejected",
+                      description: `${selectedCandidate.firstName} ${selectedCandidate.lastName} has been rejected.`,
+                      variant: "destructive"
+                    });
+                    setIsViewModalOpen(false);
+                  }}
+                  className="flex-1"
+                >
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Reject
+                </Button>
+                <Button 
+                  onClick={() => {
+                    // Handle move to interview logic here
+                    toast({
+                      title: "Moved to Interview",
+                      description: `${selectedCandidate.firstName} ${selectedCandidate.lastName} has been moved to interview stage.`,
+                    });
+                    setIsViewModalOpen(false);
+                  }}
+                  className="flex-1"
+                >
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Move to Interview
+                </Button>
               </div>
             </div>
           )}
@@ -818,7 +1137,7 @@ export default function Candidates() {
           </CardContent>
         </Card>
 
-        {/* Candidates Grid */}
+        {/* Candidates Table */}
         {candidates.length === 0 ? (
           <Card>
             <CardContent className="p-12">
@@ -843,116 +1162,155 @@ export default function Candidates() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {candidates.map((candidate) => (
-              <Card key={candidate.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-lg mb-2">{getFullName(candidate)}</CardTitle>
-                      {candidate.currentPosition && (
-                        <p className="text-sm text-gray-600 mb-1">{candidate.currentPosition}</p>
-                      )}
-                      {candidate.currentCompany && (
-                        <p className="text-sm text-gray-500 mb-2">at {candidate.currentCompany}</p>
-                      )}
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <MapPin className="h-4 w-4" />
-                        <span>{candidate.location || 'Location not specified'}</span>
-                        {candidate.isRemoteOk && (
-                          <Badge variant="secondary" className="text-xs">Remote OK</Badge>
-                        )}
-                      </div>
-                    </div>
-                    {candidate.isBlacklisted && (
-                      <Badge variant="destructive" className="text-xs">
-                        Blacklisted
-                      </Badge>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Mail className="h-4 w-4 text-gray-400" />
-                      <span className="truncate">{candidate.email}</span>
-                    </div>
-                    {candidate.phone && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Phone className="h-4 w-4 text-gray-400" />
-                        <span>{candidate.phone}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {candidate.summary && (
-                    <p className="text-sm text-gray-600 line-clamp-3">
-                      {candidate.summary}
-                    </p>
-                  )}
-
-                  <div className="flex items-center justify-between text-sm">
-                    <div>
-                      <span className="font-medium">{candidate.yearsOfExperience}</span>
-                      <span className="text-gray-500 ml-1">
-                        {candidate.yearsOfExperience === 1 ? 'year' : 'years'} experience
-                      </span>
-                    </div>
-                    {candidate.source && (
-                      <Badge variant="outline" className="text-xs">
-                        {candidate.source}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {(candidate.desiredSalaryMin || candidate.desiredSalaryMax) && (
-                    <div className="text-sm">
-                      <span className="text-gray-500">Salary expectation: </span>
-                      <span className="font-medium">
-                        {formatSalary(candidate.desiredSalaryMin, candidate.desiredSalaryMax)}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="border-t pt-4">
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <span>{getTimeAgo(candidate.createdAt)}</span>
-                      <div className="flex items-center gap-2">
-                        {candidate.linkedinUrl && (
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                            <ExternalLink className="h-3 w-3" />
-                          </Button>
-                        )}
-                        {candidate.resumeFilePath && (
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                            <Eye className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2 pt-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="flex-1"
-                      onClick={() => handleViewProfile(candidate)}
-                    >
-                      View Profile
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      className="flex-1"
-                      onClick={() => handleContactCandidate(candidate)}
-                    >
-                      Contact
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b">
+                    <TableHead className="w-[200px]">
+                      <Button 
+                        variant="ghost" 
+                        onClick={() => handleSort('name')}
+                        className="h-auto p-0 font-semibold hover:bg-transparent"
+                      >
+                        CANDIDATE
+                        {getSortIcon('name')}
+                      </Button>
+                    </TableHead>
+                    <TableHead>
+                      <Button 
+                        variant="ghost" 
+                        onClick={() => handleSort('position')}
+                        className="h-auto p-0 font-semibold hover:bg-transparent"
+                      >
+                        POSITION
+                        {getSortIcon('position')}
+                      </Button>
+                    </TableHead>
+                    <TableHead className="w-[100px]">
+                      <Button 
+                        variant="ghost" 
+                        onClick={() => handleSort('aiScore')}
+                        className="h-auto p-0 font-semibold hover:bg-transparent"
+                      >
+                        AI SCORE
+                        {getSortIcon('aiScore')}
+                      </Button>
+                    </TableHead>
+                    <TableHead className="w-[120px]">STATUS</TableHead>
+                    <TableHead className="w-[100px]">
+                      <Button 
+                        variant="ghost" 
+                        onClick={() => handleSort('createdAt')}
+                        className="h-auto p-0 font-semibold hover:bg-transparent"
+                      >
+                        APPLIED
+                        {getSortIcon('createdAt')}
+                      </Button>
+                    </TableHead>
+                    <TableHead className="w-[150px]">MATCH SCORE</TableHead>
+                    <TableHead className="w-[120px]">ACTIONS</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedCandidates.map((candidate) => {
+                    const statusBadge = getStatusBadge(candidate);
+                    const aiScore = candidate.aiScore || 0;
+                    
+                    return (
+                      <TableRow key={candidate.id} className="hover:bg-gray-50">
+                        <TableCell className="py-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="flex-shrink-0">
+                              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                <span className="text-sm font-medium text-blue-600">
+                                  {candidate.firstName?.[0]}{candidate.lastName?.[0]}
+                                </span>
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {getFullName(candidate)}
+                              </div>
+                              <div className="text-sm text-gray-500 flex items-center gap-1">
+                                <MapPin className="h-3 w-3" />
+                                {candidate.location || 'Location not specified'}
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-4">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {candidate.currentPosition || 'Position not specified'}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {candidate.yearsOfExperience} years experience
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-4 text-center">
+                          <div className={`text-sm font-semibold ${getScoreColor(aiScore)}`}>
+                            <TrendingUp className="h-4 w-4 inline mr-1" />
+                            {aiScore}/100
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-4">
+                          <Badge variant={statusBadge.variant} className="text-xs">
+                            {statusBadge.text}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-4">
+                          <div className="flex items-center gap-1 text-sm text-gray-600">
+                            <Calendar className="h-4 w-4" />
+                            {formatDate(candidate.createdAt)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-4">
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className={`font-medium ${getScoreColor(aiScore)}`}>{aiScore}%</span>
+                            </div>
+                            {getMatchScoreBar(aiScore)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-4">
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleViewProfile(candidate)}
+                              className="h-8 w-8 p-0"
+                              title="View Profile"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleContactCandidate(candidate)}
+                              className="h-8 w-8 p-0"
+                              title="Contact"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              title="More actions"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         )}
 
         {/* Quick Stats */}
