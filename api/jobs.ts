@@ -1,61 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-// Simple in-memory database
-const jobsDB = {
-  jobs: [
-    {
-      id: 'job-001',
-      title: 'Senior AI Engineer',
-      description: 'Join our team to build the next generation of AI-powered recruitment tools.',
-      department: 'Engineering',
-      location: 'San Francisco, CA',
-      jobType: 'full-time',
-      employmentType: 'permanent',
-      salaryMin: 150000,
-      salaryMax: 200000,
-      experienceLevel: 'senior',
-      status: 'active',
-      applications: 12,
-      qualified: 8,
-      createdAt: '2024-01-15T10:00:00Z',
-      updatedAt: '2024-01-15T10:00:00Z'
-    },
-    {
-      id: 'job-002',
-      title: 'Product Manager',
-      description: 'Lead product strategy for our AI-powered recruitment platform.',
-      department: 'Product',
-      location: 'Remote',
-      jobType: 'full-time',
-      employmentType: 'permanent',
-      salaryMin: 120000,
-      salaryMax: 160000,
-      experienceLevel: 'mid',
-      status: 'active',
-      applications: 8,
-      qualified: 5,
-      createdAt: '2024-01-20T14:30:00Z',
-      updatedAt: '2024-01-20T14:30:00Z'
-    },
-    {
-      id: 'job-003',
-      title: 'UX Designer',
-      description: 'Design intuitive user experiences for our recruitment platform.',
-      department: 'Design',
-      location: 'New York, NY',
-      jobType: 'full-time',
-      employmentType: 'permanent',
-      salaryMin: 90000,
-      salaryMax: 130000,
-      experienceLevel: 'mid',
-      status: 'active',
-      applications: 15,
-      qualified: 10,
-      createdAt: '2024-01-25T09:15:00Z',
-      updatedAt: '2024-01-25T09:15:00Z'
-    }
-  ]
-};
+import { getMemoryDB } from './init-db';
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
@@ -69,8 +13,9 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'GET') {
     try {
+      const db = getMemoryDB();
       // Apply filters
-      let filteredJobs = [...jobsDB.jobs];
+      let filteredJobs = [...(db.jobs || [])];
       
       if (req.query.search) {
         const searchTerm = (req.query.search as string).toLowerCase();
@@ -107,6 +52,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'POST') {
     try {
+      const db = getMemoryDB();
       const newJob = {
         id: `job-${Date.now()}`,
         title: req.body.title,
@@ -125,7 +71,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
         updatedAt: new Date().toISOString()
       };
       
-      jobsDB.jobs.push(newJob);
+      db.jobs.push(newJob);
       
       return res.status(201).json({
         success: true,

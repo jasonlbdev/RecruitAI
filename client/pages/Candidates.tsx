@@ -101,7 +101,9 @@ interface Candidate {
   status: "active" | "inactive" | "hired" | "withdrawn";
   isRemoteOk: boolean;
   isBlacklisted: boolean;
+  blacklistReason?: string;
   notes?: string;
+  jobId?: string;
   aiScore?: number;
   aiAnalysisSummary?: string;
   aiRecommendation?: string;
@@ -116,8 +118,8 @@ interface Candidate {
   keyStrengths?: string[];
   concerns?: string[];
   biasDetection?: any;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface CreateCandidateForm {
@@ -230,7 +232,79 @@ export default function Candidates() {
   const createCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Add form validation
+    // AI-First Flow: If AI extraction is enabled, skip manual validation
+    if (formData.useAIExtraction && formData.resumeFile) {
+      // Only validate required fields for AI extraction
+      if (!formData.jobId) {
+        toast({
+          title: "Validation Error",
+          description: "Please select a job position for AI analysis.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setIsCreating(true);
+      try {
+        // Validate file type
+        const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+        if (!allowedTypes.includes(formData.resumeFile.type)) {
+          toast({
+            title: "Invalid File Type",
+            description: "Please upload a PDF, DOC, DOCX, or TXT file.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Validate file size (max 10MB)
+        if (formData.resumeFile.size > 10 * 1024 * 1024) {
+          toast({
+            title: "File Too Large",
+            description: "Please upload a file smaller than 10MB.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const formDataWithFile = new FormData();
+        formDataWithFile.append('resume', formData.resumeFile);
+        formDataWithFile.append('jobId', formData.jobId);
+        
+        const response = await fetch('/api/upload-resume', {
+          method: 'POST',
+          body: formDataWithFile,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to upload resume');
+        }
+
+        const result = await response.json();
+        if (result.success) {
+          toast({
+            title: "Candidate Added Successfully",
+            description: `${result.data.firstName} ${result.data.lastName} has been added with AI-extracted data.`,
+          });
+          setIsCreateModalOpen(false);
+          resetForm();
+          loadCandidates();
+        }
+      } catch (error) {
+        console.error('Error with AI extraction:', error);
+        toast({
+          title: "Error",
+          description: error instanceof Error ? error.message : "Failed to process resume with AI. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsCreating(false);
+      }
+      return;
+    }
+    
+    // Manual entry validation (only when NOT using AI extraction)
     if (!formData.firstName.trim()) {
       toast({
         title: "Validation Error",
@@ -288,78 +362,29 @@ export default function Candidates() {
         skills: formData.skills ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0) : [],
       };
 
-      // Handle resume upload with AI extraction
-      if (formData.useAIExtraction && formData.resumeFile) {
-        // Validate file type
-        const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
-        if (!allowedTypes.includes(formData.resumeFile.type)) {
-          toast({
-            title: "Invalid File Type",
-            description: "Please upload a PDF, DOC, DOCX, or TXT file.",
-            variant: "destructive",
-          });
-          return;
-        }
+      // Manual entry
+      const response = await fetch('/api/candidates', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(candidateData),
+      });
 
-        // Validate file size (max 10MB)
-        if (formData.resumeFile.size > 10 * 1024 * 1024) {
-          toast({
-            title: "File Too Large",
-            description: "Please upload a file smaller than 10MB.",
-            variant: "destructive",
-          });
-          return;
-        }
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create candidate');
+      }
 
-        const formDataWithFile = new FormData();
-        formDataWithFile.append('resume', formData.resumeFile);
-        formDataWithFile.append('jobId', formData.jobId);
-        
-        const response = await fetch('/api/upload-resume', {
-          method: 'POST',
-          body: formDataWithFile,
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          title: "Candidate Added Successfully",
+          description: `${formData.firstName} ${formData.lastName} has been added to the system.`,
         });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to upload resume');
-        }
-
-        const result = await response.json();
-        if (result.success) {
-          toast({
-            title: "Candidate Added Successfully",
-            description: `${result.data.firstName} ${result.data.lastName} has been added with AI-extracted data.`,
-          });
-          setIsCreateModalOpen(false);
-          resetForm();
-          loadCandidates();
-        }
-      } else {
-        // Manual entry
-        const response = await fetch('/api/candidates', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(candidateData),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to create candidate');
-        }
-
-        const result = await response.json();
-        if (result.success) {
-          toast({
-            title: "Candidate Added Successfully",
-            description: `${formData.firstName} ${formData.lastName} has been added to the system.`,
-          });
-          setIsCreateModalOpen(false);
-          resetForm();
-          loadCandidates();
-        }
+        setIsCreateModalOpen(false);
+        resetForm();
+        loadCandidates();
       }
     } catch (error) {
       console.error('Error creating candidate:', error);
@@ -482,10 +507,95 @@ export default function Candidates() {
   };
 
   const handleContactCandidate = (candidate: Candidate) => {
-    // Open email client with pre-filled template
-    const emailSubject = encodeURIComponent(`Re: ${candidate.currentPosition || 'Job Opportunity'} Position`);
-    const emailBody = encodeURIComponent(`Hi ${candidate.firstName},\n\nI hope this message finds you well. I'm reaching out regarding a potential opportunity...\n\nBest regards`);
-    window.location.href = `mailto:${candidate.email}?subject=${emailSubject}&body=${emailBody}`;
+    // Open email client with pre-filled email
+    const subject = `Regarding your application for ${availableJobs.find(j => j.id === candidate.jobId)?.title || 'our position'}`;
+    const body = `Dear ${candidate.firstName},\n\nThank you for your interest in our position...\n\nBest regards,\nRecruitment Team`;
+    const mailtoLink = `mailto:${candidate.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(mailtoLink);
+  };
+
+  const handleEditCandidate = (candidate: Candidate) => {
+    setSelectedCandidate(candidate);
+    setFormData({
+      firstName: candidate.firstName || '',
+      lastName: candidate.lastName || '',
+      email: candidate.email || '',
+      phone: candidate.phone || '',
+      location: candidate.location || '',
+      currentPosition: candidate.currentPosition || '',
+      currentCompany: candidate.currentCompany || '',
+      yearsOfExperience: candidate.yearsOfExperience?.toString() || '0',
+      summary: candidate.summary || '',
+      skills: candidate.skills?.join(', ') || '',
+      source: candidate.source || 'manual',
+      desiredSalaryMin: candidate.desiredSalaryMin?.toString() || '',
+      desiredSalaryMax: candidate.desiredSalaryMax?.toString() || '',
+      isRemoteOk: candidate.isRemoteOk || false,
+      useAIExtraction: false,
+      jobId: candidate.jobId || '',
+      resumeFile: null
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleAddNote = async (candidateId: string, note: string) => {
+    try {
+      const response = await fetch(`/api/candidates/${candidateId}/notes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ note })
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Note Added",
+          description: "Candidate note has been added successfully."
+        });
+        loadCandidates(); // Refresh the list
+      } else {
+        throw new Error('Failed to add note');
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add note. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleBlacklistCandidate = async (candidate: Candidate) => {
+    try {
+      const response = await fetch(`/api/candidates/${candidate.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...candidate,
+          isBlacklisted: !candidate.isBlacklisted,
+          blacklistReason: !candidate.isBlacklisted ? 'Marked via candidate management' : ''
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: candidate.isBlacklisted ? "Candidate Unblacklisted" : "Candidate Blacklisted",
+          description: `${candidate.firstName} ${candidate.lastName} has been ${candidate.isBlacklisted ? 'removed from' : 'added to'} the blacklist.`
+        });
+        loadCandidates();
+      } else {
+        throw new Error('Failed to update candidate status');
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update candidate status. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleSort = (field: string) => {
@@ -500,30 +610,6 @@ export default function Candidates() {
   const getSortIcon = (field: string) => {
     if (sortField !== field) return <ArrowUpDown className="h-4 w-4" />;
     return sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />;
-  };
-
-  const handleEditCandidate = (candidate: Candidate) => {
-    // Populate form with candidate data
-    setFormData({
-      firstName: candidate.firstName,
-      lastName: candidate.lastName,
-      email: candidate.email,
-      phone: candidate.phone || '',
-      location: candidate.location || '',
-      currentPosition: candidate.currentPosition || '',
-      currentCompany: candidate.currentCompany || '',
-      yearsOfExperience: candidate.yearsOfExperience?.toString() || '0',
-      summary: candidate.summary || '',
-      skills: Array.isArray(candidate.skills) ? candidate.skills.join(', ') : '',
-      source: candidate.source || 'manual',
-      desiredSalaryMin: candidate.desiredSalaryMin?.toString() || '',
-      desiredSalaryMax: candidate.desiredSalaryMax?.toString() || '',
-      isRemoteOk: candidate.isRemoteOk || false,
-      useAIExtraction: false,
-      jobId: ''
-    });
-    setSelectedCandidate(candidate);
-    setIsEditModalOpen(true);
   };
 
   const updateCandidate = async (e: React.FormEvent) => {
@@ -547,7 +633,8 @@ export default function Candidates() {
         source: formData.source,
         desiredSalaryMin: formData.desiredSalaryMin ? parseInt(formData.desiredSalaryMin) : null,
         desiredSalaryMax: formData.desiredSalaryMax ? parseInt(formData.desiredSalaryMax) : null,
-        isRemoteOk: formData.isRemoteOk
+        isRemoteOk: formData.isRemoteOk,
+        jobId: formData.jobId
       };
 
       const response = await fetch(`/api/candidates/${selectedCandidate.id}`, {
@@ -584,11 +671,6 @@ export default function Candidates() {
     } finally {
       setIsEditing(false);
     }
-  };
-
-  const handleDeleteCandidate = (candidate: Candidate) => {
-    setCandidateToDelete(candidate);
-    setIsDeleteDialogOpen(true);
   };
 
   const confirmDeleteCandidate = async () => {
@@ -628,41 +710,9 @@ export default function Candidates() {
     }
   };
 
-  const handleBlacklistCandidate = async (candidate: Candidate) => {
-    try {
-      const response = await fetch(`/api/candidates/${candidate.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          ...candidate, 
-          isBlacklisted: !candidate.isBlacklisted,
-          status: candidate.isBlacklisted ? 'active' : 'blacklisted'
-        })
-      });
-
-      if (response.ok) {
-        toast({
-          title: candidate.isBlacklisted ? "Candidate unblacklisted" : "Candidate blacklisted",
-          description: `${candidate.firstName} ${candidate.lastName} has been ${candidate.isBlacklisted ? 'removed from' : 'added to'} the blacklist.`,
-        });
-        loadCandidates(); // Reload candidates
-      } else {
-        const errorData = await response.json();
-        toast({
-          title: "Error",
-          description: errorData.error || "Failed to update candidate status.",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update candidate status. Please try again.",
-        variant: "destructive",
-      });
-    }
+  const handleDeleteCandidate = (candidate: Candidate) => {
+    setCandidateToDelete(candidate);
+    setIsDeleteDialogOpen(true);
   };
 
   const sortedCandidates = [...candidates].sort((a, b) => {
