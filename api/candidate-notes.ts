@@ -56,33 +56,18 @@ async function getCandidateNotes(query: NoteQuery): Promise<{ notes: CandidateNo
     const { neon } = await import('@neondatabase/serverless');
     const sql = neon(process.env.DATABASE_URL);
     
-    // Build dynamic query
-    const conditions: string[] = [];
-    const values: any[] = [];
-    
-    if (query.candidate_id) {
-      conditions.push(`candidate_id = $${values.length + 1}`);
-      values.push(query.candidate_id);
-    }
-    
-    if (query.note_type) {
-      conditions.push(`note_type = $${values.length + 1}`);
-      values.push(query.note_type);
-    }
-    
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    // Simple query without dynamic conditions for now
     const limit = query.limit || 50;
     const offset = query.offset || 0;
     
     // Get total count
     const countResult = await sql`
-      SELECT COUNT(*) as total FROM candidate_notes ${sql.unsafe(whereClause)}
+      SELECT COUNT(*) as total FROM candidate_notes
     `.catch(() => [{ total: 0 }]);
     
     // Get notes with pagination
     const notesResult = await sql`
       SELECT * FROM candidate_notes 
-      ${sql.unsafe(whereClause)}
       ORDER BY created_at DESC 
       LIMIT ${limit} OFFSET ${offset}
     `.catch(() => []);

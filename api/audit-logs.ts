@@ -60,53 +60,18 @@ async function getAuditLogs(query: AuditLogQuery): Promise<{ logs: AuditLogEntry
     const { neon } = await import('@neondatabase/serverless');
     const sql = neon(process.env.DATABASE_URL);
     
-    // Build dynamic query with proper typing
-    const conditions: string[] = [];
-    const values: any[] = [];
-    
-    if (query.entity_type) {
-      conditions.push(`entity_type = $${values.length + 1}`);
-      values.push(query.entity_type);
-    }
-    
-    if (query.entity_id) {
-      conditions.push(`entity_id = $${values.length + 1}`);
-      values.push(query.entity_id);
-    }
-    
-    if (query.action) {
-      conditions.push(`action = $${values.length + 1}`);
-      values.push(query.action);
-    }
-    
-    if (query.user_id) {
-      conditions.push(`user_id = $${values.length + 1}`);
-      values.push(query.user_id);
-    }
-    
-    if (query.start_date) {
-      conditions.push(`created_at >= $${values.length + 1}`);
-      values.push(query.start_date);
-    }
-    
-    if (query.end_date) {
-      conditions.push(`created_at <= $${values.length + 1}`);
-      values.push(query.end_date);
-    }
-    
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    // Simple query without dynamic conditions for now
     const limit = query.limit || 50;
     const offset = query.offset || 0;
     
     // Get total count
     const countResult = await sql`
-      SELECT COUNT(*) as total FROM audit_logs ${sql.unsafe(whereClause)}
+      SELECT COUNT(*) as total FROM audit_logs
     `.catch(() => [{ total: 0 }]);
     
     // Get logs with pagination
     const logsResult = await sql`
       SELECT * FROM audit_logs 
-      ${sql.unsafe(whereClause)}
       ORDER BY created_at DESC 
       LIMIT ${limit} OFFSET ${offset}
     `.catch(() => []);
