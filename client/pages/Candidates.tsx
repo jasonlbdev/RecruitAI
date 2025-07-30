@@ -65,8 +65,10 @@ import {
   Ban,
   UserMinus,
   AlertTriangle,
+  MessageSquareIcon,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import CandidateNotesModal from '@/components/CandidateNotesModal';
 
 interface Candidate {
   id: string;
@@ -152,8 +154,9 @@ export default function Candidates() {
   const [isCreating, setIsCreating] = useState(false);
   const [availableJobs, setAvailableJobs] = useState<any[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(false);
-  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
+  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -540,13 +543,27 @@ export default function Candidates() {
 
   const handleAddNote = async (candidateId: string, note: string) => {
     try {
-        // TODO: Implement candidate notes system
-        // const response = await fetch(`/api/candidates/${candidateId}/notes`, {
-        //   method: 'POST',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify({ note: newNote })
-        // });
-        console.log('Candidate notes system not yet implemented');
+      const response = await fetch('/api/candidate-notes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          candidate_id: candidateId, 
+          note: note,
+          note_type: 'general'
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Note Added",
+          description: "Candidate note has been added successfully."
+        });
+        // Refresh the list or update the specific candidate
+      } else {
+        throw new Error('Failed to add note');
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -1288,6 +1305,17 @@ export default function Candidates() {
                             >
                               <MessageCircle className="h-4 w-4" />
                             </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedCandidate(candidate);
+                                setIsNotesModalOpen(true);
+                              }}
+                            >
+                              <MessageSquareIcon className="h-4 w-4 mr-2" />
+                              Notes
+                            </Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button 
@@ -1882,6 +1910,14 @@ export default function Candidates() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Candidate Notes Modal */}
+      <CandidateNotesModal
+        isOpen={isNotesModalOpen}
+        onClose={() => setIsNotesModalOpen(false)}
+        candidateId={selectedCandidate?.id || ''}
+        candidateName={selectedCandidate ? `${selectedCandidate.firstName} ${selectedCandidate.lastName}` : ''}
+      />
     </div>
   );
 }
