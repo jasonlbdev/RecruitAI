@@ -69,6 +69,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import CandidateNotesModal from '@/components/CandidateNotesModal';
+import AdvancedFilters from '@/components/AdvancedFilters';
 
 interface Candidate {
   id: string;
@@ -183,6 +184,21 @@ export default function Candidates() {
     isRemoteOk: false,
     useAIExtraction: false,
     jobId: ''
+  });
+
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState({
+    search: '',
+    location: '',
+    experienceMin: 0,
+    experienceMax: 20,
+    salaryMin: 0,
+    salaryMax: 200000,
+    skills: [],
+    jobType: '',
+    isRemote: false,
+    status: '',
+    dateRange: ''
   });
 
   useEffect(() => {
@@ -825,6 +841,63 @@ export default function Candidates() {
     return `${candidate.firstName} ${candidate.lastName}`;
   };
 
+  const handleClearFilters = () => {
+    setFilters({
+      search: '',
+      location: '',
+      experienceMin: 0,
+      experienceMax: 20,
+      salaryMin: 0,
+      salaryMax: 200000,
+      skills: [],
+      jobType: '',
+      isRemote: false,
+      status: '',
+      dateRange: ''
+    });
+  };
+
+  const filteredCandidates = candidates.filter(candidate => {
+    // Search filter
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      const matchesSearch = 
+        candidate.firstName?.toLowerCase().includes(searchLower) ||
+        candidate.lastName?.toLowerCase().includes(searchLower) ||
+        candidate.email?.toLowerCase().includes(searchLower) ||
+        candidate.skills?.some(skill => skill.toLowerCase().includes(searchLower));
+      
+      if (!matchesSearch) return false;
+    }
+
+    // Location filter
+    if (filters.location) {
+      const locationLower = filters.location.toLowerCase();
+      if (!candidate.location?.toLowerCase().includes(locationLower)) {
+        return false;
+      }
+    }
+
+    // Experience filter
+    const candidateExp = candidate.yearsOfExperience || 0;
+    if (candidateExp < filters.experienceMin || candidateExp > filters.experienceMax) {
+      return false;
+    }
+
+    // Salary filter
+    const candidateSalary = candidate.desiredSalaryMin || 0;
+    if (candidateSalary < filters.salaryMin || candidateSalary > filters.salaryMax) {
+      return false;
+    }
+
+    // Remote filter
+    if (filters.isRemote && !candidate.isRemoteOk) {
+      return false;
+    }
+
+    return true;
+  });
+
   if (loading) {
     return (
       <div className="flex-1 bg-gray-50 p-6">
@@ -843,6 +916,36 @@ export default function Candidates() {
       {/* Header */}
       <header className="border-b bg-white">
         <div className="px-6 py-4">
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-3xl font-bold">Candidates</h1>
+            <div className="flex gap-2">
+              <AdvancedFilters
+                type="candidates"
+                filters={filters}
+                onFiltersChange={setFilters}
+                onClearFilters={handleClearFilters}
+                isOpen={isFiltersOpen}
+                onToggle={() => setIsFiltersOpen(!isFiltersOpen)}
+              />
+              <Button onClick={() => setIsCreateModalOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Candidate
+              </Button>
+            </div>
+          </div>
+
+          {isFiltersOpen && (
+            <div className="mb-6">
+              <AdvancedFilters
+                type="candidates"
+                filters={filters}
+                onFiltersChange={setFilters}
+                onClearFilters={handleClearFilters}
+                isOpen={true}
+                onToggle={() => setIsFiltersOpen(false)}
+              />
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Users className="h-8 w-8 text-primary" />
@@ -1149,7 +1252,7 @@ export default function Candidates() {
         </Card>
 
         {/* Candidates Table */}
-        {candidates.length === 0 ? (
+        {filteredCandidates.length === 0 ? (
           <Card>
             <CardContent className="p-12">
               <div className="text-center">
@@ -1224,7 +1327,7 @@ export default function Candidates() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedCandidates.map((candidate) => {
+                  {filteredCandidates.map((candidate) => {
                     const statusBadge = getStatusBadge(candidate);
                     const aiScore = candidate.aiScore || 0;
                     
@@ -1369,7 +1472,7 @@ export default function Candidates() {
         )}
 
         {/* Quick Stats */}
-        {candidates.length > 0 && (
+        {filteredCandidates.length > 0 && (
           <Card className="mt-6">
             <CardHeader>
               <CardTitle>Quick Stats</CardTitle>
@@ -1377,24 +1480,24 @@ export default function Candidates() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-primary">{candidates.length}</div>
+                  <div className="text-2xl font-bold text-primary">{filteredCandidates.length}</div>
                   <div className="text-sm text-gray-600">Total Candidates</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-600">
-                    {candidates.filter(c => c.isRemoteOk).length}
+                    {filteredCandidates.filter(c => c.isRemoteOk).length}
                   </div>
                   <div className="text-sm text-gray-600">Remote-friendly</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-blue-600">
-                    {candidates.filter(c => c.yearsOfExperience >= 5).length}
+                    {filteredCandidates.filter(c => c.yearsOfExperience >= 5).length}
                   </div>
                   <div className="text-sm text-gray-600">5+ Years Experience</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-purple-600">
-                    {candidates.filter(c => c.source === 'referral').length}
+                    {filteredCandidates.filter(c => c.source === 'referral').length}
                   </div>
                   <div className="text-sm text-gray-600">Referrals</div>
                 </div>

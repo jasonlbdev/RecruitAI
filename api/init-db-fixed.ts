@@ -80,6 +80,48 @@ async function initializeDatabase() {
       )
     `;
 
+    // Create workflow_rules table
+    await sql`
+      CREATE TABLE IF NOT EXISTS workflow_rules (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        conditions JSONB NOT NULL,
+        actions JSONB NOT NULL,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `;
+
+    // Create tasks table
+    await sql`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        assigned_to VARCHAR(255),
+        entity_type VARCHAR(50),
+        entity_id VARCHAR(255),
+        status VARCHAR(50) DEFAULT 'pending',
+        priority VARCHAR(20) DEFAULT 'medium',
+        due_date TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `;
+
+    // Create email_logs table
+    await sql`
+      CREATE TABLE IF NOT EXISTS email_logs (
+        id SERIAL PRIMARY KEY,
+        template_id VARCHAR(255) NOT NULL,
+        recipient VARCHAR(255) NOT NULL,
+        subject TEXT NOT NULL,
+        variables JSONB,
+        sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `;
+
     // Create candidate_scores table
     await sql`
       CREATE TABLE IF NOT EXISTS candidate_scores (

@@ -38,7 +38,7 @@
     "pdf-parse": "^1.1.1",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
-    "zod": "^3.23.8"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.9.0",
