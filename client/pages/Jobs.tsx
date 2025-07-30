@@ -728,15 +728,15 @@ export default function Jobs() {
       }
 
       // Send to bulk processing API
-      const response = await fetch('/api/bulk-upload-resumes', {
+      const response = await fetch('/api/bulk-upload-resumes-fixed', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          resumes: resumeData,
+          files: resumeData,
           jobId: selectedJob.id
-        })
+        }),
       });
 
       if (response.ok) {

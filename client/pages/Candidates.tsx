@@ -271,7 +271,7 @@ export default function Candidates() {
         formDataWithFile.append('resume', formData.resumeFile);
         formDataWithFile.append('jobId', formData.jobId);
         
-        const response = await fetch('/api/upload-resume', {
+        const response = await fetch('/api/upload-resume-fixed', {
           method: 'POST',
           body: formDataWithFile,
         });
@@ -405,7 +405,7 @@ export default function Candidates() {
       // Convert file to text (simplified - in production you'd use proper PDF parsing)
       const fileText = await formData.resumeFile.text();
       
-      const response = await fetch('/api/upload-resume', {
+      const response = await fetch('/api/upload-resume-fixed', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

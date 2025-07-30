@@ -135,7 +135,7 @@ export default function Settings() {
     setTestResult(null);
 
     try {
-      const response = await fetch('/api/test-ai', {
+      const response = await fetch('/api/test-ai-fixed', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
