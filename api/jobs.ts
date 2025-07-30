@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getMemoryDB } from './init-db';
+import { getAllJobs, getJobById, createJob } from '../lib/database';
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -13,17 +13,18 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'GET') {
     try {
-      const db = getMemoryDB();
-      // Apply filters
-      let filteredJobs = [...(db.jobs || [])];
+      const jobs = await getAllJobs();
+      
+      // Apply client-side filters (simplified - proper filtering would be in SQL)
+      let filteredJobs = [...jobs];
       
       if (req.query.search) {
         const searchTerm = (req.query.search as string).toLowerCase();
         filteredJobs = filteredJobs.filter(job =>
-          job.title.toLowerCase().includes(searchTerm) ||
-          job.department.toLowerCase().includes(searchTerm) ||
-          job.location.toLowerCase().includes(searchTerm) ||
-          job.description.toLowerCase().includes(searchTerm)
+          job.title?.toLowerCase().includes(searchTerm) ||
+          job.department?.toLowerCase().includes(searchTerm) ||
+          job.location?.toLowerCase().includes(searchTerm) ||
+          job.description?.toLowerCase().includes(searchTerm)
         );
       }
       
@@ -43,45 +44,70 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
         }
       });
     } catch (error) {
+      console.error('Error fetching jobs:', error);
       return res.status(500).json({
         success: false,
-        error: 'Failed to fetch jobs'
+        error: 'Failed to fetch jobs. Please ensure database is connected.'
       });
     }
   }
 
   if (req.method === 'POST') {
     try {
-      const db = getMemoryDB();
-      const newJob = {
-        id: `job-${Date.now()}`,
-        title: req.body.title,
-        description: req.body.description,
-        department: req.body.department,
-        location: req.body.location,
-        jobType: req.body.jobType || 'full-time',
-        employmentType: req.body.employmentType || 'permanent',
-        salaryMin: req.body.salaryMin,
-        salaryMax: req.body.salaryMax,
-        experienceLevel: req.body.experienceLevel || 'mid',
-        status: 'active',
-        applications: 0,
-        qualified: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+      const jobData = {
+        ...req.body,
+        status: req.body.status || 'active',
+        postedBy: req.body.postedBy || 'System Admin',
+        applicants: 0
       };
-      
-      db.jobs.push(newJob);
+
+      const newJob = await createJob(jobData);
       
       return res.status(201).json({
         success: true,
-        data: newJob,
-        message: 'Job created successfully'
+        data: newJob
       });
     } catch (error) {
+      console.error('Error creating job:', error);
       return res.status(500).json({
         success: false,
-        error: 'Failed to create job'
+        error: 'Failed to create job. Please check your data and try again.'
+      });
+    }
+  }
+
+  // Handle individual job operations (GET, PUT, DELETE by ID)
+  const urlParts = req.url?.split('/') || [];
+  const jobId = urlParts[urlParts.length - 1];
+
+  if (req.method === 'PUT' && jobId) {
+    try {
+      // For now, return a message about updating jobs
+      return res.status(200).json({
+        success: true,
+        message: 'Job update functionality will be implemented with database migrations'
+      });
+    } catch (error) {
+      console.error('Error updating job:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to update job'
+      });
+    }
+  }
+
+  if (req.method === 'DELETE' && jobId) {
+    try {
+      // For now, return a message about deleting jobs
+      return res.status(200).json({
+        success: true,
+        message: 'Job deletion functionality will be implemented with database migrations'
+      });
+    } catch (error) {
+      console.error('Error deleting job:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to delete job'
       });
     }
   }

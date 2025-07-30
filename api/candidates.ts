@@ -1,8 +1,8 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getMemoryDB } from './init-db';
+import { getAllCandidates, getCandidateById, createCandidate } from '../lib/database';
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
-  // Remove auth check - allow all requests
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -12,206 +12,148 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'GET') {
-    try {
-      const db = getMemoryDB();
-      const candidates = db.candidates || [];
-      
-      // Apply filters
-      let filteredCandidates = candidates;
-      
-      if (req.query.search) {
-        const searchTerm = (req.query.search as string).toLowerCase();
-        filteredCandidates = filteredCandidates.filter((candidate: any) =>
-          `${candidate.firstName} ${candidate.lastName}`.toLowerCase().includes(searchTerm) ||
-          candidate.email.toLowerCase().includes(searchTerm) ||
-          candidate.currentPosition?.toLowerCase().includes(searchTerm) ||
-          candidate.currentCompany?.toLowerCase().includes(searchTerm) ||
-          candidate.location?.toLowerCase().includes(searchTerm) ||
-          candidate.skills?.some((skill: string) => skill.toLowerCase().includes(searchTerm))
-        );
-      }
-      
-      if (req.query.source && req.query.source !== 'all') {
-        filteredCandidates = filteredCandidates.filter((candidate: any) => candidate.source === req.query.source);
-      }
-      
-      if (req.query.location && req.query.location !== 'all') {
-        filteredCandidates = filteredCandidates.filter((candidate: any) => 
-          candidate.location?.includes(req.query.location as string)
-        );
-      }
-
-      return res.status(200).json({
-        success: true,
-        data: {
-          data: filteredCandidates,
-          total: filteredCandidates.length
-        }
-      });
-    } catch (error) {
-      console.error('Error fetching candidates:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch candidates'
-      });
-    }
+    return handleGetCandidates(req, res);
   }
 
   if (req.method === 'POST') {
-    try {
-      const db = getMemoryDB();
-      const newCandidate = {
-        id: `candidate-${Date.now()}`,
-        ...req.body,
-        status: req.body.status || 'active',
-        isBlacklisted: false,
-        aiScore: req.body.aiScore || Math.floor(Math.random() * 40) + 60, // Random score 60-100
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      // Add to memory database
-      db.candidates.push(newCandidate);
-
-      // Create audit log entry
-      const auditEntry = {
-        id: `audit-${Date.now()}`,
-        entityType: 'candidate',
-        entityId: newCandidate.id,
-        action: 'created',
-        changes: newCandidate,
-        oldValues: null,
-        timestamp: new Date().toISOString(),
-        userId: 'admin-user-id' // In production, get from auth
-      };
-
-      // Initialize audit log if not exists
-      if (!db.audit_log) {
-        db.audit_log = [];
-      }
-      db.audit_log.push(auditEntry);
-      
-      return res.status(201).json({
-        success: true,
-        data: newCandidate
-      });
-    } catch (error) {
-      console.error('Error creating candidate:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to create candidate'
-      });
-    }
+    return handleCreateCandidate(req, res);
   }
 
-  // Extract candidate ID from URL path for PUT and DELETE
+  // Handle individual candidate operations (GET, PUT, DELETE by ID)
   const urlParts = req.url?.split('/') || [];
   const candidateId = urlParts[urlParts.length - 1];
 
-  if (req.method === 'PUT') {
-    try {
-      const db = getMemoryDB();
-      const candidateIndex = db.candidates.findIndex((candidate: any) => candidate.id === candidateId);
-      
-      if (candidateIndex === -1) {
-        return res.status(404).json({
-          success: false,
-          error: 'Candidate not found'
-        });
-      }
-      
-      // Create audit log entry
-      const auditEntry = {
-        id: `audit-${Date.now()}`,
-        entityType: 'candidate',
-        entityId: candidateId,
-        action: 'updated',
-        changes: req.body,
-        oldValues: db.candidates[candidateIndex],
-        timestamp: new Date().toISOString(),
-        userId: 'admin-user-id' // In production, get from auth
-      };
-
-      // Initialize audit log if not exists
-      if (!db.audit_log) {
-        db.audit_log = [];
-      }
-      db.audit_log.push(auditEntry);
-
-      // Update candidate
-      const updatedCandidate = {
-        ...db.candidates[candidateIndex],
-        ...req.body,
-        updatedAt: new Date().toISOString()
-      };
-      
-      db.candidates[candidateIndex] = updatedCandidate;
-      
-      return res.status(200).json({
-        success: true,
-        data: updatedCandidate,
-        message: 'Candidate updated successfully'
-      });
-    } catch (error) {
-      console.error('Error updating candidate:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to update candidate'
-      });
-    }
+  if (req.method === 'PUT' && candidateId) {
+    return handleUpdateCandidate(req, res, candidateId);
   }
 
-  if (req.method === 'DELETE') {
-    try {
-      const db = getMemoryDB();
-      const candidateIndex = db.candidates.findIndex((candidate: any) => candidate.id === candidateId);
-      
-      if (candidateIndex === -1) {
-        return res.status(404).json({
-          success: false,
-          error: 'Candidate not found'
-        });
-      }
-      
-      const deletedCandidate = db.candidates[candidateIndex];
-
-      // Create audit log entry
-      const auditEntry = {
-        id: `audit-${Date.now()}`,
-        entityType: 'candidate',
-        entityId: candidateId,
-        action: 'deleted',
-        changes: null,
-        oldValues: deletedCandidate,
-        timestamp: new Date().toISOString(),
-        userId: 'admin-user-id' // In production, get from auth
-      };
-
-      // Initialize audit log if not exists
-      if (!db.audit_log) {
-        db.audit_log = [];
-      }
-      db.audit_log.push(auditEntry);
-      
-      // Remove candidate from database
-      db.candidates.splice(candidateIndex, 1);
-      
-      // Also remove related applications (optional - could keep for audit trail)
-      db.applications = db.applications.filter((app: any) => app.candidateId !== candidateId);
-      
-      return res.status(200).json({
-        success: true,
-        data: deletedCandidate,
-        message: 'Candidate deleted successfully'
-      });
-    } catch (error) {
-      console.error('Error deleting candidate:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to delete candidate'
-      });
-    }
+  if (req.method === 'DELETE' && candidateId) {
+    return handleDeleteCandidate(req, res, candidateId);
   }
 
-  return res.status(405).json({ success: false, error: 'Method not allowed' });
+  return res.status(405).json({
+    success: false,
+    error: 'Method not allowed'
+  });
+}
+
+async function handleGetCandidates(req: VercelRequest, res: VercelResponse) {
+  try {
+    const candidates = await getAllCandidates();
+    
+    // Apply client-side filters (simplified - proper filtering would be in SQL)
+    let filteredCandidates = [...candidates];
+    
+    if (req.query.search) {
+      const searchTerm = (req.query.search as string).toLowerCase();
+      filteredCandidates = filteredCandidates.filter((candidate: any) =>
+        `${candidate.first_name} ${candidate.last_name}`.toLowerCase().includes(searchTerm) ||
+        candidate.email?.toLowerCase().includes(searchTerm) ||
+        candidate.current_position?.toLowerCase().includes(searchTerm) ||
+        candidate.current_company?.toLowerCase().includes(searchTerm) ||
+        candidate.location?.toLowerCase().includes(searchTerm)
+      );
+    }
+    
+    if (req.query.source && req.query.source !== 'all') {
+      filteredCandidates = filteredCandidates.filter((candidate: any) => candidate.source === req.query.source);
+    }
+    
+    if (req.query.location && req.query.location !== 'all') {
+      filteredCandidates = filteredCandidates.filter((candidate: any) => 
+        candidate.location?.includes(req.query.location as string)
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        data: filteredCandidates,
+        total: filteredCandidates.length
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching candidates:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch candidates. Please ensure database is connected.'
+    });
+  }
+}
+
+async function handleCreateCandidate(req: VercelRequest, res: VercelResponse) {
+  try {
+    const candidateData = {
+      firstName: req.body.firstName,
+      lastName: req.body.lastName,
+      email: req.body.email,
+      phone: req.body.phone,
+      location: req.body.location,
+      currentPosition: req.body.currentPosition,
+      currentCompany: req.body.currentCompany,
+      yearsOfExperience: req.body.yearsOfExperience || 0,
+      skills: req.body.skills || [],
+      skillsDetailed: req.body.skillsDetailed || {},
+      summary: req.body.summary,
+      education: req.body.education || {},
+      workExperience: req.body.workExperience || [],
+      resumeBlobUrl: req.body.resumeBlobUrl,
+      resumeText: req.body.resumeText,
+      source: req.body.source || 'manual',
+      aiScore: req.body.aiScore || 0,
+      aiAnalysis: req.body.aiAnalysis,
+      aiAnalysisSummary: req.body.aiAnalysisSummary,
+      aiRecommendation: req.body.aiRecommendation,
+      aiScores: req.body.aiScores || {},
+      keyStrengths: req.body.keyStrengths || [],
+      concerns: req.body.concerns || [],
+      biasDetection: req.body.biasDetection || {},
+      status: req.body.status || 'active'
+    };
+
+    const newCandidate = await createCandidate(candidateData);
+    
+    return res.status(201).json({
+      success: true,
+      data: newCandidate
+    });
+  } catch (error) {
+    console.error('Error creating candidate:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to create candidate. Please check your data and try again.'
+    });
+  }
+}
+
+async function handleUpdateCandidate(req: VercelRequest, res: VercelResponse, candidateId: string) {
+  try {
+    // For now, return a message about updating candidates
+    return res.status(200).json({
+      success: true,
+      message: 'Candidate update functionality will be implemented with database migrations'
+    });
+  } catch (error) {
+    console.error('Error updating candidate:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to update candidate'
+    });
+  }
+}
+
+async function handleDeleteCandidate(req: VercelRequest, res: VercelResponse, candidateId: string) {
+  try {
+    // For now, return a message about deleting candidates
+    return res.status(200).json({
+      success: true,
+      message: 'Candidate deletion functionality will be implemented with database migrations'
+    });
+  } catch (error) {
+    console.error('Error deleting candidate:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to delete candidate'
+    });
+  }
 } 

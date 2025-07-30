@@ -1,7 +1,8 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
+import { put } from '@vercel/blob';
 import { getMemoryDB } from './init-db';
+import { createCandidate, createApplication } from '../lib/database';
 
-// Simple file handling for Vercel (in production, you'd use proper file storage)
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -25,7 +26,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const db = getMemoryDB();
+    // Step 1: Upload resume to Vercel Blob Storage
+    let resumeBlobUrl = '';
+    try {
+      const blobFilename = `resumes/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      
+      const blob = await put(blobFilename, fileContent, {
+        access: 'public',
+        contentType: fileName.endsWith('.pdf') ? 'application/pdf' : 'text/plain'
+      });
+      
+      resumeBlobUrl = blob.url;
+      console.log('Resume uploaded to Vercel Blob:', resumeBlobUrl);
+    } catch (blobError) {
+      console.error('Vercel Blob upload failed:', blobError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to upload resume file to storage'
+      });
+    }
+
+    const db = await getMemoryDB();
 
     // Get OpenAI API key
     const apiKeySetting = db.system_settings.find((s: any) => s.key === 'openai_api_key');
@@ -46,17 +67,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const resumeAnalysisPromptSetting = db.system_settings.find((s: any) => s.key === 'resume_analysis_prompt');
     let analysisPrompt = resumeAnalysisPromptSetting?.value || 'Analyze this resume and extract candidate information.';
     
+    // Get job-specific scoring weights (with defaults)
+    const weights = jobDetails?.scoringWeights || {
+      experience: 30, skills: 30, location: 15, education: 15, salary: 10
+    };
+    
     if (jobDetails) {
+      // Create weighted emphasis for extraction
+      const weightedInstructions = `
+**EXTRACTION PRIORITIES FOR THIS ${jobDetails.title} ROLE:**
+- Experience/Career Level: ${weights.experience}% weight - ${weights.experience > 30 ? 'CRITICAL FOCUS' : weights.experience > 20 ? 'HIGH FOCUS' : 'STANDARD FOCUS'}
+- Technical Skills Match: ${weights.skills}% weight - ${weights.skills > 30 ? 'CRITICAL FOCUS' : weights.skills > 20 ? 'HIGH FOCUS' : 'STANDARD FOCUS'}  
+- Location/Remote Compatibility: ${weights.location}% weight - ${weights.location > 20 ? 'CRITICAL FOCUS' : weights.location > 10 ? 'HIGH FOCUS' : 'STANDARD FOCUS'}
+- Education Requirements: ${weights.education}% weight - ${weights.education > 20 ? 'CRITICAL FOCUS' : weights.education > 10 ? 'HIGH FOCUS' : 'STANDARD FOCUS'}
+- Salary Alignment: ${weights.salary}% weight - ${weights.salary > 15 ? 'CRITICAL FOCUS' : weights.salary > 10 ? 'HIGH FOCUS' : 'STANDARD FOCUS'}
+
+**JOB CONTEXT:**
+- Position: ${jobDetails.title}
+- Department: ${jobDetails.department}
+- Required Experience Level: ${jobDetails.experienceLevel}
+- Location: ${jobDetails.location} ${jobDetails.isRemote ? '(Remote Work Available)' : '(On-site Required)'}
+- Salary Budget: $${jobDetails.salaryMin || 'TBD'} - $${jobDetails.salaryMax || 'TBD'}
+- Key Requirements: ${jobDetails.requirements?.join(', ') || 'See job description'}
+
+**GIVE DETAILED ANALYSIS IN CRITICAL/HIGH FOCUS AREAS**`;
+
+      // Replace template variables with job-specific data
       analysisPrompt = analysisPrompt
         .replace('{resume_text}', fileContent)
         .replace('{job_requirements}', jobDetails.requirements?.join(', ') || 'Not specified')
         .replace('{job_description}', jobDetails.description || 'Not specified');
+
+      // Enhance prompt with job-specific context
+      analysisPrompt = `${analysisPrompt}
+
+${weightedInstructions}`;
     }
 
-    // Enhanced prompt for data extraction
+    // Enhanced prompt for structured data extraction with job-specific scoring
     const extractionPrompt = `${analysisPrompt}
 
-IMPORTANT: Please extract the following information and return it as a JSON object:
+IMPORTANT: Please extract the following information and return it as a JSON object.
+Pay special attention to the CRITICAL FOCUS and HIGH FOCUS areas mentioned above.
 
 {
   "firstName": "extracted first name",
@@ -91,37 +143,46 @@ IMPORTANT: Please extract the following information and return it as a JSON obje
       "achievements": ["key achievement 1", "key achievement 2"]
     }
   ],
-  "overallScore": "score 0-100 for job match",
+  "overallScore": "score 0-100 for job match based on weighted priorities",
   "keyStrengths": ["strength1", "strength2"],
   "concerns": ["concern1", "concern2"],
   "recommendation": "STRONG_MATCH, GOOD_MATCH, POTENTIAL_MATCH, or POOR_MATCH",
-  "experienceScore": "0-100 score for experience match",
-  "skillsScore": "0-100 score for skills match", 
-  "locationScore": "0-100 score for location preference",
-  "educationScore": "0-100 score for education background",
-  "salaryScore": "0-100 score for salary expectations",
+  "experienceScore": "0-100 score for experience match (${jobDetails ? weights.experience + '% weight' : 'standard weight'})",
+  "skillsScore": "0-100 score for skills match (${jobDetails ? weights.skills + '% weight' : 'standard weight'})", 
+  "locationScore": "0-100 score for location preference (${jobDetails ? weights.location + '% weight' : 'standard weight'})",
+  "educationScore": "0-100 score for education background (${jobDetails ? weights.education + '% weight' : 'standard weight'})",
+  "salaryScore": "0-100 score for salary expectations (${jobDetails ? weights.salary + '% weight' : 'standard weight'})",
   "biasDetection": {
     "potentialBias": ["any potential bias indicators"],
     "diversityNotes": "notes on diversity considerations"
   },
-  "aiAnalysisSummary": "comprehensive 2-3 sentence summary of candidate fit"
+  "aiAnalysisSummary": "comprehensive 2-3 sentence summary of candidate fit for this specific role"
 }
 
 Resume Content:
 ${fileContent}`;
 
-    // Call OpenAI API
+    // Call Grok xAI API instead of OpenAI
     const modelSetting = db.system_settings.find((s: any) => s.key === 'model');
     const systemPromptSetting = db.system_settings.find((s: any) => s.key === 'system_prompt');
 
-    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Get Grok API key instead of OpenAI key
+    const grokApiKeySetting = db.system_settings.find((s: any) => s.key === 'grok_api_key');
+    if (!grokApiKeySetting || !grokApiKeySetting.value) {
+      return res.status(500).json({
+        success: false,
+        error: 'Grok API key not configured. Please configure in Settings.'
+      });
+    }
+
+    const grokResponse = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKeySetting.value}`,
+        'Authorization': `Bearer ${grokApiKeySetting.value}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: modelSetting?.value || 'gpt-4',
+        model: modelSetting?.value || 'grok-beta',
         messages: [
           {
             role: 'system',
@@ -137,13 +198,13 @@ ${fileContent}`;
       }),
     });
 
-    if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      throw new Error(`OpenAI API error: ${openaiResponse.status} - ${errorText}`);
+    if (!grokResponse.ok) {
+      const errorText = await grokResponse.text();
+      throw new Error(`Grok API error: ${grokResponse.status} - ${errorText}`);
     }
 
-    const openaiData = await openaiResponse.json();
-    const aiResponse = openaiData.choices[0]?.message?.content;
+    const grokData = await grokResponse.json();
+    const aiResponse = grokData.choices[0]?.message?.content;
 
     if (!aiResponse) {
       throw new Error('No response from AI');
@@ -194,7 +255,7 @@ ${fileContent}`;
       status: 'active',
       isRemoteOk: false,
       isBlacklisted: false,
-      resumeFilePath: `/uploads/${fileName}`,
+      resumeFilePath: resumeBlobUrl,
       resumeText: fileContent,
       aiScore: extractedData.overallScore || 0,
       aiAnalysis: aiResponse,
@@ -211,6 +272,7 @@ ${fileContent}`;
       keyStrengths: extractedData.keyStrengths || [],
       concerns: extractedData.concerns || [],
       biasDetection: extractedData.biasDetection || {},
+      jobId: jobId || null, // Link to the job
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -238,7 +300,7 @@ ${fileContent}`;
         experience: `${newCandidate.yearsOfExperience} years`,
         source: 'resume_upload',
         resumeUrl: newCandidate.resumeFilePath,
-        notes: `AI Recommendation: ${newCandidate.aiRecommendation}`,
+        notes: `AI Recommendation: ${newCandidate.aiRecommendation}. Job-specific analysis completed with weighted scoring.`,
         createdAt: new Date().toISOString()
       };
       
@@ -253,8 +315,9 @@ ${fileContent}`;
         aiAnalysis: {
           extractedData,
           fullAnalysis: aiResponse,
+          jobSpecificWeights: weights,
           processingTime: Date.now(),
-          tokensUsed: openaiData.usage?.total_tokens || 0
+          tokensUsed: grokData.usage?.total_tokens || 0
         }
       }
     });
@@ -266,4 +329,4 @@ ${fileContent}`;
       error: error instanceof Error ? error.message : 'Failed to process resume'
     });
   }
-} 
+}

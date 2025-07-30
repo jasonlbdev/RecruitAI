@@ -43,148 +43,96 @@ function checkRateLimit(): boolean {
   return true;
 }
 
-async function processResumeWithAI(fileContent: string, fileName: string, jobData: any, apiKey: string) {
-  if (!checkRateLimit()) {
-    throw new Error('Rate limit exceeded. Please wait before processing more resumes.');
-  }
+// Helper function to process individual resume with Grok AI
+async function processResumeWithAI(resumeText: string, fileName: string, jobData: any, grokApiKey: string) {
+  const analysisPrompt = `
+Analyze this resume for the position: ${jobData.title}
 
-  const db = getMemoryDB();
-  
-  // Get resume analysis prompt
-  const resumePromptSetting = db.prompts.find(p => p.key === 'resume_analysis_prompt');
-  const basePrompt = resumePromptSetting?.value || 'Analyze this resume and extract candidate information.';
-  
-  // Create job-specific context
-  const jobContext = `
+**JOB REQUIREMENTS:**
+${jobData.requirements?.join(', ') || 'General requirements'}
 
-**JOB CONTEXT:**
-Position: ${jobData.title}
-Department: ${jobData.department}
-Location: ${jobData.location}
-Experience Level: ${jobData.experienceLevel}
-Requirements: ${Array.isArray(jobData.requirements) ? jobData.requirements.join(', ') : 'Not specified'}
-Description: ${jobData.description}
+**JOB DESCRIPTION:**
+${jobData.description}
 
-**SCORING WEIGHTS (prioritize accordingly):**
-${jobData.scoringWeights ? `
-- Experience: ${jobData.scoringWeights.experience}%
-- Skills: ${jobData.scoringWeights.skills}%
-- Location: ${jobData.scoringWeights.location}%
-- Education: ${jobData.scoringWeights.education}%
-- Salary: ${jobData.scoringWeights.salary}%
-` : 'Equal weighting for all factors'}
+**SCORING PRIORITIES:**
+- Experience: ${jobData.scoringWeights.experience}% weight
+- Skills: ${jobData.scoringWeights.skills}% weight  
+- Location: ${jobData.scoringWeights.location}% weight
+- Education: ${jobData.scoringWeights.education}% weight
+- Salary: ${jobData.scoringWeights.salary}% weight
 
-Analyze this resume specifically for this position and use the scoring weights above.`;
-
-  // Create the full analysis prompt
-  const analysisPrompt = basePrompt + jobContext;
-
-  // Enhanced extraction prompt
-  const extractionPrompt = `${analysisPrompt}
-
-IMPORTANT: Please extract the following information and return it as a JSON object:
+Please extract the following information and return it as a JSON object:
 
 {
   "firstName": "extracted first name",
-  "lastName": "extracted last name", 
+  "lastName": "extracted last name",
   "email": "extracted email",
-  "phone": "extracted phone",
+  "phone": "extracted phone", 
   "location": "extracted location",
   "currentPosition": "current job title",
   "currentCompany": "current company",
   "yearsOfExperience": "estimated years as number",
   "skills": {
-    "programmingLanguages": ["JavaScript", "Python", "etc"],
-    "frameworks": ["React", "Node.js", "etc"],
-    "tools": ["AWS", "Docker", "etc"],
-    "databases": ["PostgreSQL", "MongoDB", "etc"],
-    "softSkills": ["Leadership", "Communication", "etc"],
-    "certifications": ["AWS Certified", "PMP", "etc"],
     "allSkills": ["comprehensive list of all skills found"]
   },
   "summary": "professional summary",
-  "education": {
-    "degree": "highest degree",
-    "institution": "university/school name", 
-    "graduationYear": "year if found",
-    "gpa": "if mentioned"
-  },
-  "workExperience": [
-    {
-      "company": "company name",
-      "position": "job title", 
-      "duration": "time period",
-      "achievements": ["key achievement 1", "key achievement 2"]
-    }
-  ],
-  "overallScore": "score 0-100 for job match based on scoring weights",
+  "overallScore": "score 0-100 for job match based on weighted priorities",
   "keyStrengths": ["strength1", "strength2"],
   "concerns": ["concern1", "concern2"],
   "recommendation": "STRONG_MATCH, GOOD_MATCH, POTENTIAL_MATCH, or POOR_MATCH",
-  "experienceScore": "0-100 score for experience match",
-  "skillsScore": "0-100 score for skills match", 
-  "locationScore": "0-100 score for location preference",
-  "educationScore": "0-100 score for education background",
-  "salaryScore": "0-100 score for salary expectations",
-  "biasDetection": {
-    "potentialBias": ["any potential bias indicators"],
-    "diversityNotes": "notes on diversity considerations"
-  },
-  "aiAnalysisSummary": "comprehensive 2-3 sentence summary of candidate fit"
+  "aiAnalysisSummary": "comprehensive 2-3 sentence summary of candidate fit for this specific role"
 }
 
 Resume Content:
-${fileContent}`;
+${resumeText}`;
 
-  // Call OpenAI API
-  const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+  const grokResponse = await fetch('https://api.x.ai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
+      'Authorization': `Bearer ${grokApiKey}`,
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4',
+      model: 'grok-beta',
       messages: [
         {
           role: 'system',
-          content: 'You are an expert HR recruitment assistant. Analyze resumes and extract information as JSON.'
+          content: 'You are an expert recruitment assistant. Extract candidate information accurately and return valid JSON.'
         },
         {
-          role: 'user', 
-          content: extractionPrompt
+          role: 'user',
+          content: analysisPrompt
         }
       ],
+      max_tokens: 2000,
       temperature: 0.3,
-      max_tokens: 1500
-    })
+    }),
   });
 
-  if (!openAIResponse.ok) {
-    const errorData = await openAIResponse.json();
-    throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
+  if (!grokResponse.ok) {
+    throw new Error(`Grok API error: ${grokResponse.status}`);
   }
 
-  const aiResult = await openAIResponse.json();
-  const aiContent = aiResult.choices[0]?.message?.content;
+  const grokData = await grokResponse.json();
+  const aiResponse = grokData.choices[0]?.message?.content;
 
-  if (!aiContent) {
-    throw new Error('No response from AI');
+  if (!aiResponse) {
+    throw new Error('No response from Grok AI');
   }
 
-  // Parse AI response
-  let extractedData;
+  // Try to parse JSON from Grok response
+  let extractedData: any = {};
   try {
-    // Try to extract JSON from the response
-    const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
+    // Look for JSON in the response
+    const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       extractedData = JSON.parse(jsonMatch[0]);
     } else {
-      throw new Error('No JSON found in AI response');
+      throw new Error('No JSON found in Grok AI response');
     }
   } catch (parseError) {
-    console.error('Failed to parse AI response as JSON:', parseError);
-    throw new Error('Failed to parse AI analysis');
+    console.error('Failed to parse Grok AI response as JSON:', parseError);
+    throw new Error('Failed to parse Grok AI analysis');
   }
 
   return extractedData;
@@ -215,26 +163,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Job ID is required' });
     }
 
-    const db = getMemoryDB();
+    const db = await getMemoryDB();
 
-    // Get OpenAI API key
-    const apiKeySetting = db.system_settings.find(s => s.key === 'openai_api_key');
-    const apiKey = apiKeySetting?.value;
+         // Get Grok API key
+     const grokApiKeySetting = db.system_settings.find((s: any) => s.key === 'grok_api_key');
+     const grokApiKey = grokApiKeySetting?.value;
 
-    if (!apiKey) {
-      return res.status(400).json({ error: 'OpenAI API key not configured' });
+    if (!grokApiKey) {
+      return res.status(400).json({ error: 'Grok API key not configured' });
     }
 
-    // Get job details (mock job data for now)
+    // Get actual job details from database
+    const job = (db as any).jobs?.find((j: any) => j.id === jobId);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
     const jobData = {
       id: jobId,
-      title: 'Software Engineer',
-      department: 'Engineering', 
-      location: 'San Francisco, CA',
-      experienceLevel: 'mid',
-      requirements: ['JavaScript', 'React', 'Node.js'],
-      description: 'Build scalable web applications',
-      scoringWeights: {
+      title: job.title,
+      department: job.department,
+      location: job.location,
+      experienceLevel: job.experienceLevel,
+      requirements: job.requirements || [],
+      description: job.description,
+      isRemote: job.isRemote,
+      salaryMin: job.salaryMin,
+      salaryMax: job.salaryMax,
+      // Use actual job-specific AI scoring weights
+      scoringWeights: job.scoringWeights || {
         experience: 30,
         skills: 30,
         location: 15,
@@ -261,7 +218,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           resume.fileContent,
           resume.fileName,
           jobData,
-          apiKey
+          grokApiKey
         );
 
         // Create candidate

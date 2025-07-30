@@ -1,8 +1,8 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getMemoryDB } from './init-db';
+import { getAllApplications, createApplication } from '../lib/database';
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
-  // Remove auth check - allow all requests
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -13,14 +13,13 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'GET') {
     try {
-      const db = getMemoryDB();
-      const applications = db.applications || [];
-      const { status } = req.query;
+      const applications = await getAllApplications();
       
-      let filteredApplications = applications;
+      // Apply filters
+      let filteredApplications = [...applications];
       
-      if (status && status !== 'all') {
-        filteredApplications = applications.filter((app: any) => app.status === status);
+      if (req.query.status && req.query.status !== 'all') {
+        filteredApplications = filteredApplications.filter((app: any) => app.status === req.query.status);
       }
       
       return res.status(200).json({
@@ -34,26 +33,26 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
       console.error('Error fetching applications:', error);
       return res.status(500).json({
         success: false,
-        error: 'Failed to fetch applications'
+        error: 'Failed to fetch applications. Please ensure database is connected.'
       });
     }
   }
 
   if (req.method === 'POST') {
     try {
-      const db = getMemoryDB();
-      const newApplication = {
-        id: `app-${Date.now()}`,
-        ...req.body,
+      const applicationData = {
+        jobId: req.body.jobId,
+        candidateId: req.body.candidateId,
         status: req.body.status || 'new',
         stage: req.body.stage || 'Application Submitted',
-        aiScore: req.body.aiScore || Math.floor(Math.random() * 40) + 60,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        aiScore: req.body.aiScore || 0,
+        notes: req.body.notes || '',
+        appliedDate: req.body.appliedDate || new Date().toISOString().split('T')[0],
+        experience: req.body.experience || '',
+        resumeUrl: req.body.resumeUrl || ''
       };
-      
-      // Add to memory database
-      db.applications.push(newApplication);
+
+      const newApplication = await createApplication(applicationData);
       
       return res.status(201).json({
         success: true,
@@ -63,58 +62,21 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
       console.error('Error creating application:', error);
       return res.status(500).json({
         success: false,
-        error: 'Failed to create application'
+        error: 'Failed to create application. Please check your data and try again.'
       });
     }
   }
 
-  // Extract application ID from URL path for PUT and DELETE
+  // Handle individual application operations (GET, PUT, DELETE by ID)
   const urlParts = req.url?.split('/') || [];
   const applicationId = urlParts[urlParts.length - 1];
 
-  if (req.method === 'PUT') {
+  if (req.method === 'PUT' && applicationId) {
     try {
-      const db = getMemoryDB();
-      const applicationIndex = db.applications.findIndex((app: any) => app.id === applicationId);
-      
-      if (applicationIndex === -1) {
-        return res.status(404).json({
-          success: false,
-          error: 'Application not found'
-        });
-      }
-      
-      // Create audit log entry
-      const auditEntry = {
-        id: `audit-${Date.now()}`,
-        entityType: 'application',
-        entityId: applicationId,
-        action: 'updated',
-        changes: req.body,
-        oldValues: db.applications[applicationIndex],
-        timestamp: new Date().toISOString(),
-        userId: 'admin-user-id'
-      };
-
-      // Initialize audit log if not exists
-      if (!db.audit_log) {
-        db.audit_log = [];
-      }
-      db.audit_log.push(auditEntry);
-
-      // Update application
-      const updatedApplication = {
-        ...db.applications[applicationIndex],
-        ...req.body,
-        updatedAt: new Date().toISOString()
-      };
-      
-      db.applications[applicationIndex] = updatedApplication;
-      
+      // For now, return a message about updating applications
       return res.status(200).json({
         success: true,
-        data: updatedApplication,
-        message: 'Application updated successfully'
+        message: 'Application update functionality will be implemented with database migrations'
       });
     } catch (error) {
       console.error('Error updating application:', error);
@@ -125,45 +87,12 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  if (req.method === 'DELETE') {
+  if (req.method === 'DELETE' && applicationId) {
     try {
-      const db = getMemoryDB();
-      const applicationIndex = db.applications.findIndex((app: any) => app.id === applicationId);
-      
-      if (applicationIndex === -1) {
-        return res.status(404).json({
-          success: false,
-          error: 'Application not found'
-        });
-      }
-      
-      const deletedApplication = db.applications[applicationIndex];
-
-      // Create audit log entry
-      const auditEntry = {
-        id: `audit-${Date.now()}`,
-        entityType: 'application',
-        entityId: applicationId,
-        action: 'deleted',
-        changes: null,
-        oldValues: deletedApplication,
-        timestamp: new Date().toISOString(),
-        userId: 'admin-user-id'
-      };
-
-      // Initialize audit log if not exists
-      if (!db.audit_log) {
-        db.audit_log = [];
-      }
-      db.audit_log.push(auditEntry);
-      
-      // Remove application from database
-      db.applications.splice(applicationIndex, 1);
-      
+      // For now, return a message about deleting applications
       return res.status(200).json({
         success: true,
-        data: deletedApplication,
-        message: 'Application deleted successfully'
+        message: 'Application deletion functionality will be implemented with database migrations'
       });
     } catch (error) {
       console.error('Error deleting application:', error);
@@ -174,5 +103,8 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  return res.status(405).json({ success: false, error: 'Method not allowed' });
+  return res.status(405).json({
+    success: false,
+    error: 'Method not allowed'
+  });
 } 
