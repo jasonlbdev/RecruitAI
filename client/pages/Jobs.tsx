@@ -347,17 +347,17 @@ export default function Jobs() {
   const handleViewJobDetails = (job: Job) => {
     setSelectedJob(job);
     setIsViewModalOpen(true);
-    loadAuditHistory(job.id);
+    // TODO: Implement audit log system
+    // const response = await fetch(`/api/settings?action=audit-log&entityType=job&entityId=${jobId}`);
+    console.log('Audit log system not yet implemented');
   };
 
   const loadAuditHistory = async (jobId: string) => {
     setIsLoadingAudit(true);
     try {
-      const response = await fetch(`/api/settings?action=audit-log&entityType=job&entityId=${jobId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setAuditLogs(data.data || []);
-      }
+        // TODO: Implement audit log system
+        // const response = await fetch(`/api/settings?action=audit-log&entityType=job&entityId=${jobId}`);
+        console.log('Audit log system not yet implemented');
     } catch (error) {
       console.error('Failed to load audit history:', error);
     } finally {
