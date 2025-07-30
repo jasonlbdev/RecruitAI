@@ -162,6 +162,7 @@ export default function Jobs() {
   }, [jobs]);
 
   const loadJobs = async () => {
+    setLoading(true);
     try {
       const params = new URLSearchParams();
       
@@ -169,11 +170,11 @@ export default function Jobs() {
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (departmentFilter !== 'all') params.append('department', departmentFilter);
       
-      const response = await fetch(`/api/jobs?${params.toString()}`);
+      const response = await fetch(`/api/jobs-fixed?${params.toString()}`);
       
       if (response.ok) {
         const data = await response.json();
-        setJobs(data.data?.data || []);
+        setJobs(data.jobs || []);
       }
     } catch (error) {
       console.error('Failed to load jobs:', error);
@@ -301,12 +302,12 @@ export default function Jobs() {
         status: 'active'
       };
 
-      const response = await fetch('/api/jobs', {
+      const response = await fetch('/api/jobs-fixed', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(jobData)
+        body: JSON.stringify(jobData),
       });
 
       if (response.ok) {
@@ -464,12 +465,12 @@ export default function Jobs() {
         }
       };
 
-      const response = await fetch(`/api/jobs/${selectedJob.id}`, {
+      const response = await fetch(`/api/jobs-fixed/${selectedJob.id}`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(jobData)
+        body: JSON.stringify(jobData),
       });
 
       if (response.ok) {
@@ -510,8 +511,8 @@ export default function Jobs() {
     setIsDeleting(true);
 
     try {
-      const response = await fetch(`/api/jobs/${jobToDelete.id}`, {
-        method: 'DELETE'
+      const response = await fetch(`/api/jobs-fixed/${jobToDelete.id}`, {
+        method: 'DELETE',
       });
 
       if (response.ok) {
@@ -568,12 +569,12 @@ export default function Jobs() {
 
   const handleStatusChange = async (job: Job, newStatus: string) => {
     try {
-      const response = await fetch(`/api/jobs/${job.id}`, {
+      const response = await fetch(`/api/jobs-fixed/${job.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ ...job, status: newStatus })
+        body: JSON.stringify({ status: newStatus }),
       });
 
       if (response.ok) {

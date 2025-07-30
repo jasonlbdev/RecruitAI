@@ -54,11 +54,11 @@ export default function Index() {
 
   const loadDashboardData = async () => {
     try {
-      const response = await fetch('/api/dashboard/metrics');
+      const response = await fetch('/api/dashboard-fixed');
       
       if (response.ok) {
         const data = await response.json();
-        setMetrics(data.data);
+        setMetrics(data.metrics);
       }
     } catch (error) {
       console.error('Failed to load dashboard metrics:', error);

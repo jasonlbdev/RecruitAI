@@ -40,43 +40,42 @@ export default function Pipeline() {
     try {
       setLoading(true);
       
-      const response = await fetch('/api/applications');
-      if (!response.ok) {
-        throw new Error('Failed to fetch applications');
-      }
+      const response = await fetch('/api/applications-fixed');
       
-      const result = await response.json();
-      const applications = result.data?.data || [];
-      
-      // Define standard pipeline stages
-      const stages = [
-        { id: 'new', name: 'New Applications', status: 'new' },
-        { id: 'reviewing', name: 'Under Review', status: 'reviewing' },
-        { id: 'screening', name: 'Phone Screening', status: 'screening' },
-        { id: 'interview', name: 'Interview', status: 'interview' },
-        { id: 'offer', name: 'Offer Extended', status: 'offer' },
-        { id: 'hired', name: 'Hired', status: 'hired' },
-        { id: 'rejected', name: 'Rejected', status: 'rejected' }
-      ];
-      
-      // Group applications by stage
-      const pipelineData = stages.map(stage => {
-        const stageApplications = applications.filter((app: Application) => 
-          app.status === stage.status
-        );
+      if (response.ok) {
+        const data = await response.json();
+        const applications = data.applications || [];
         
-        return {
-          id: stage.id,
-          name: stage.name,
-          count: stageApplications.length,
-          applications: stageApplications.map((app: Application) => ({
-            ...app,
-            candidate_name: app.candidate_name || `${app.first_name || ''} ${app.last_name || ''}`.trim() || 'Unknown Candidate'
-          }))
-        };
-      });
-      
-      setPipelineStages(pipelineData);
+        // Define standard pipeline stages
+        const stages = [
+          { id: 'new', name: 'New Applications', status: 'new' },
+          { id: 'reviewing', name: 'Under Review', status: 'reviewing' },
+          { id: 'screening', name: 'Phone Screening', status: 'screening' },
+          { id: 'interview', name: 'Interview', status: 'interview' },
+          { id: 'offer', name: 'Offer Extended', status: 'offer' },
+          { id: 'hired', name: 'Hired', status: 'hired' },
+          { id: 'rejected', name: 'Rejected', status: 'rejected' }
+        ];
+        
+        // Group applications by stage
+        const pipelineData = stages.map(stage => {
+          const stageApplications = applications.filter((app: Application) => 
+            app.status === stage.status
+          );
+          
+          return {
+            id: stage.id,
+            name: stage.name,
+            count: stageApplications.length,
+            applications: stageApplications.map((app: Application) => ({
+              ...app,
+              candidate_name: app.candidate_name || `${app.first_name || ''} ${app.last_name || ''}`.trim() || 'Unknown Candidate'
+            }))
+          };
+        });
+        
+        setPipelineStages(pipelineData);
+      }
     } catch (err) {
       console.error('Error fetching pipeline data:', err);
       setError('Failed to load pipeline data');

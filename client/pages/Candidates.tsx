@@ -201,11 +201,11 @@ export default function Candidates() {
       if (sourceFilter !== 'all') params.append('source', sourceFilter);
       if (locationFilter !== 'all') params.append('location', locationFilter);
       
-      const response = await fetch(`/api/candidates?${params.toString()}`);
+      const response = await fetch(`/api/candidates-fixed?${params.toString()}`);
       
       if (response.ok) {
         const data = await response.json();
-        setCandidates(data.data?.data || []);
+        setCandidates(data.candidates || []);
       }
     } catch (error) {
       console.error('Failed to load candidates:', error);
@@ -217,10 +217,10 @@ export default function Candidates() {
   const loadAvailableJobs = async () => {
     setLoadingJobs(true);
     try {
-      const response = await fetch('/api/jobs');
-      if (response.ok) {
-        const data = await response.json();
-        setAvailableJobs(data.data?.data || []);
+      const jobsResponse = await fetch('/api/jobs-fixed');
+      if (jobsResponse.ok) {
+        const data = await jobsResponse.json();
+        setAvailableJobs(data.jobs || []);
       }
     } catch (error) {
       console.error('Failed to load jobs:', error);
@@ -459,7 +459,7 @@ export default function Candidates() {
       status: 'active'
     };
 
-    const response = await fetch('/api/candidates', {
+    const candidateResponse = await fetch('/api/candidates-fixed', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -467,7 +467,8 @@ export default function Candidates() {
       body: JSON.stringify(candidateData)
     });
 
-    if (response.ok) {
+    if (candidateResponse.ok) {
+      const result = await candidateResponse.json();
       toast({
         title: "Candidate added",
         description: "Candidate has been added to your talent pool successfully.",
@@ -476,7 +477,7 @@ export default function Candidates() {
       resetForm();
       loadCandidates();
     } else {
-      const errorData = await response.json();
+      const errorData = await candidateResponse.json();
       toast({
         title: "Error",
         description: errorData.error || "Failed to add candidate.",
@@ -637,15 +638,15 @@ export default function Candidates() {
         jobId: formData.jobId
       };
 
-      const response = await fetch(`/api/candidates/${selectedCandidate.id}`, {
+      const updateResponse = await fetch(`/api/candidates-fixed/${selectedCandidate.id}`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(candidateData)
+        body: JSON.stringify(candidateData),
       });
 
-      if (response.ok) {
+      if (updateResponse.ok) {
         toast({
           title: "Candidate updated",
           description: "Candidate information has been updated successfully.",
@@ -655,7 +656,7 @@ export default function Candidates() {
         resetForm();
         loadCandidates(); // Reload candidates
       } else {
-        const errorData = await response.json();
+        const errorData = await updateResponse.json();
         toast({
           title: "Error",
           description: errorData.error || "Failed to update candidate.",
@@ -679,11 +680,11 @@ export default function Candidates() {
     setIsDeleting(true);
 
     try {
-      const response = await fetch(`/api/candidates/${candidateToDelete.id}`, {
-        method: 'DELETE'
+      const deleteResponse = await fetch(`/api/candidates-fixed/${candidateToDelete.id}`, {
+        method: 'DELETE',
       });
 
-      if (response.ok) {
+      if (deleteResponse.ok) {
         toast({
           title: "Candidate deleted",
           description: `${candidateToDelete.firstName} ${candidateToDelete.lastName} has been deleted successfully.`,
@@ -692,7 +693,7 @@ export default function Candidates() {
         setCandidateToDelete(null);
         loadCandidates(); // Reload candidates
       } else {
-        const errorData = await response.json();
+        const errorData = await deleteResponse.json();
         toast({
           title: "Error",
           description: errorData.error || "Failed to delete candidate.",

@@ -89,11 +89,11 @@ export default function Applications() {
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (sourceFilter !== 'all') params.append('source', sourceFilter);
       
-      const response = await fetch(`/api/applications?${params.toString()}`);
+      const response = await fetch(`/api/applications-fixed?${params.toString()}`);
       
       if (response.ok) {
         const data = await response.json();
-        setApplications(data.data?.data || []);
+        setApplications(data.applications || []);
       }
     } catch (error) {
       console.error('Failed to load applications:', error);

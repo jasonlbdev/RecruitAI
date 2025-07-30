@@ -66,7 +66,7 @@ export default function Settings() {
 
   const fetchSettings = async () => {
     try {
-      const response = await fetch('/api/settings');
+      const response = await fetch('/api/settings-fixed');
       if (response.ok) {
         const data = await response.json();
         setSettings(data.settings || {});
@@ -78,7 +78,7 @@ export default function Settings() {
 
   const fetchPromptTemplates = async () => {
     try {
-      const response = await fetch('/api/settings?action=prompts');
+      const response = await fetch('/api/settings-fixed?action=prompts');
       if (response.ok) {
         const data = await response.json();
         setPromptTemplate(data.prompts || {});
@@ -99,7 +99,7 @@ export default function Settings() {
   const saveSettings = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/settings', {
+      const response = await fetch('/api/settings-fixed', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -172,7 +172,7 @@ export default function Settings() {
   const savePromptTemplates = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/settings?action=prompts', {
+      const response = await fetch('/api/settings-fixed?action=prompts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -36,14 +36,14 @@ export default function Reports() {
   const fetchDashboardMetrics = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/dashboard/metrics');
+      const response = await fetch('/api/dashboard-fixed');
       
       if (!response.ok) {
         throw new Error('Failed to fetch metrics');
       }
       
       const result = await response.json();
-      setMetrics(result.data);
+      setMetrics(result.metrics);
     } catch (err) {
       console.error('Error fetching dashboard metrics:', err);
       setError('Failed to load dashboard metrics');

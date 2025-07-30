@@ -32,36 +32,35 @@ export default function OnboardingTracking() {
       setLoading(true);
       
       // Fetch hired candidates from applications
-      const applicationsResponse = await fetch('/api/applications');
-      if (!applicationsResponse.ok) {
-        throw new Error('Failed to fetch applications');
-      }
+      const applicationsResponse = await fetch('/api/applications-fixed');
       
-      const applicationsResult = await applicationsResponse.json();
-      const applications = applicationsResult.data?.data || [];
-      
-      // Filter for hired candidates and create onboarding data
-      const hiredApplications = applications.filter((app: any) => app.status === 'hired');
-      
-      const onboardingData = hiredApplications.map((app: any) => {
-        const startDate = new Date(app.created_at);
-        startDate.setDate(startDate.getDate() + 14); // Assume start date is 2 weeks after hire
+      if (applicationsResponse.ok) {
+        const data = await applicationsResponse.json();
+        const applications = data.applications || [];
         
-        return {
-          id: app.id,
-          name: `${app.first_name || 'Unknown'} ${app.last_name || 'Candidate'}`,
-          position: app.position || 'Position Not Specified',
-          startDate: startDate.toISOString().split('T')[0],
-          stage: determineOnboardingStage(startDate),
-          progress: calculateProgress(startDate),
-          tasks: getStandardTasks(),
-          completedTasks: getCompletedTasks(startDate),
-          manager: 'Hiring Manager', // This would come from job posting or assignment
-          status: determineStatus(startDate)
-        };
-      });
-      
-      setCandidates(onboardingData);
+        // Filter for hired candidates and create onboarding data
+        const hiredApplications = applications.filter((app: any) => app.status === 'hired');
+        
+        const onboardingData = hiredApplications.map((app: any) => {
+          const startDate = new Date(app.created_at);
+          startDate.setDate(startDate.getDate() + 14); // Assume start date is 2 weeks after hire
+          
+          return {
+            id: app.id,
+            name: `${app.first_name || 'Unknown'} ${app.last_name || 'Candidate'}`,
+            position: app.position || 'Position Not Specified',
+            startDate: startDate.toISOString().split('T')[0],
+            stage: determineOnboardingStage(startDate),
+            progress: calculateProgress(startDate),
+            tasks: getStandardTasks(),
+            completedTasks: getCompletedTasks(startDate),
+            manager: 'Hiring Manager', // This would come from job posting or assignment
+            status: determineStatus(startDate)
+          };
+        });
+        
+        setCandidates(onboardingData);
+      }
     } catch (err) {
       console.error('Error fetching onboarding data:', err);
       setError('Failed to load onboarding data');
