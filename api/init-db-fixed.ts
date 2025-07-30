@@ -66,6 +66,35 @@ async function initializeDatabase() {
       )
     `;
 
+    // Create candidate_notes table
+    await sql`
+      CREATE TABLE IF NOT EXISTS candidate_notes (
+        id SERIAL PRIMARY KEY,
+        candidate_id VARCHAR(255) NOT NULL,
+        note TEXT NOT NULL,
+        note_type VARCHAR(50) DEFAULT 'general',
+        created_by VARCHAR(255),
+        created_by_email VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `;
+
+    // Create audit_logs table
+    await sql`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id SERIAL PRIMARY KEY,
+        entity_type VARCHAR(50) NOT NULL,
+        entity_id VARCHAR(255) NOT NULL,
+        action VARCHAR(50) NOT NULL,
+        user_id VARCHAR(255),
+        user_email VARCHAR(255),
+        changes JSONB,
+        metadata JSONB,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `;
+
     // Insert default system settings
     await sql`
       INSERT INTO system_settings (key, value, description, is_public) VALUES
