@@ -240,8 +240,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // Extract text from resume (simplified - in production you'd use a PDF parser)
-      const resumeText = typeof resumeFile === 'string' ? resumeFile : 'Resume content extracted';
+      // Extract text from resume (with PDF parsing support)
+      let resumeText = 'Resume content extracted';
+      
+      if (typeof resumeFile === 'string') {
+        resumeText = resumeFile;
+      } else if (resumeFile.name && resumeFile.name.toLowerCase().endsWith('.pdf')) {
+        // Try PDF parsing for PDF files
+        try {
+          const parseResponse = await fetch('/api/parse-resume', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file: resumeFile })
+          });
+          
+          if (parseResponse.ok) {
+            const parseResult = await parseResponse.json();
+            resumeText = parseResult.data.text;
+          } else {
+            console.warn('PDF parsing failed, using fallback');
+          }
+        } catch (parseError) {
+          console.error('PDF parsing error:', parseError);
+        }
+      }
 
       // Get AI configuration
       const aiConfig = await getAIConfig();
@@ -295,7 +317,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Create application if jobId is provided
-      let newApplication = null;
+      let newApplication: any = null;
       if (jobId) {
         const applicationData = {
           job_id: jobId,
