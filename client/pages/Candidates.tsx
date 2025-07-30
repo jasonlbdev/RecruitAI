@@ -229,30 +229,143 @@ export default function Candidates() {
 
   const createCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsCreating(true);
-
-    // Validate required fields
-    if (!formData.jobId) {
+    
+    // Add form validation
+    if (!formData.firstName.trim()) {
       toast({
-        title: "Error",
-        description: "Please select a job position for this candidate.",
+        title: "Validation Error",
+        description: "First name is required.",
         variant: "destructive",
       });
-      setIsCreating(false);
+      return;
+    }
+    
+    if (!formData.lastName.trim()) {
+      toast({
+        title: "Validation Error", 
+        description: "Last name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!formData.email.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Email is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!formData.jobId) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a job position.",
+        variant: "destructive",
+      });
       return;
     }
 
+    setIsCreating(true);
     try {
-      // If resume file and AI extraction is enabled
-      if (formData.resumeFile && formData.useAIExtraction) {
-        await createCandidateFromResume();
+      let candidateData = {
+        ...formData,
+        yearsOfExperience: parseInt(formData.yearsOfExperience) || 0,
+        desiredSalaryMin: parseInt(formData.desiredSalaryMin) || 0,
+        desiredSalaryMax: parseInt(formData.desiredSalaryMax) || 0,
+        skills: formData.skills ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0) : [],
+      };
+
+      // Handle resume upload with AI extraction
+      if (formData.useAIExtraction && formData.resumeFile) {
+        // Validate file type
+        const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+        if (!allowedTypes.includes(formData.resumeFile.type)) {
+          toast({
+            title: "Invalid File Type",
+            description: "Please upload a PDF, DOC, DOCX, or TXT file.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Validate file size (max 10MB)
+        if (formData.resumeFile.size > 10 * 1024 * 1024) {
+          toast({
+            title: "File Too Large",
+            description: "Please upload a file smaller than 10MB.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const formDataWithFile = new FormData();
+        formDataWithFile.append('resume', formData.resumeFile);
+        formDataWithFile.append('jobId', formData.jobId);
+        
+        const response = await fetch('/api/upload-resume', {
+          method: 'POST',
+          body: formDataWithFile,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to upload resume');
+        }
+
+        const result = await response.json();
+        if (result.success) {
+          toast({
+            title: "Candidate Added Successfully",
+            description: `${result.data.firstName} ${result.data.lastName} has been added with AI-extracted data.`,
+          });
+          setIsCreateModalOpen(false);
+          resetForm();
+          loadCandidates();
+        }
       } else {
-        await createCandidateManually();
+        // Manual entry
+        const response = await fetch('/api/candidates', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(candidateData),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to create candidate');
+        }
+
+        const result = await response.json();
+        if (result.success) {
+          toast({
+            title: "Candidate Added Successfully",
+            description: `${formData.firstName} ${formData.lastName} has been added to the system.`,
+          });
+          setIsCreateModalOpen(false);
+          resetForm();
+          loadCandidates();
+        }
       }
     } catch (error) {
+      console.error('Error creating candidate:', error);
       toast({
         title: "Error",
-        description: "Failed to add candidate. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to create candidate. Please try again.",
         variant: "destructive",
       });
     } finally {

@@ -184,6 +184,95 @@ export default function Jobs() {
 
   const createJob = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Add form validation
+    if (!formData.title.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Job title is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!formData.department.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Department is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!formData.location.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Location is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!formData.jobType) {
+      toast({
+        title: "Validation Error",
+        description: "Job type is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!formData.employmentType) {
+      toast({
+        title: "Validation Error",
+        description: "Employment type is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!formData.description.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Job description is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!formData.requirements.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Job requirements are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!formData.experienceLevel) {
+      toast({
+        title: "Validation Error",
+        description: "Experience level is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validate salary range if provided
+    if (formData.salaryMin && formData.salaryMax) {
+      const minSalary = parseInt(formData.salaryMin);
+      const maxSalary = parseInt(formData.salaryMax);
+      
+      if (minSalary >= maxSalary) {
+        toast({
+          title: "Validation Error",
+          description: "Maximum salary must be greater than minimum salary.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
     setIsCreating(true);
 
     try {
@@ -527,18 +616,83 @@ export default function Jobs() {
 
   const handleFilesDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const files = Array.from(e.dataTransfer.files).filter(file => 
-      file.type === 'application/pdf' || 
-      file.type.includes('document') || 
-      file.type === 'text/plain'
-    );
-    setUploadFiles(prev => [...prev, ...files]);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    
+    // Validate file types and sizes
+    const validFiles: File[] = [];
+    const invalidFiles: string[] = [];
+    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    
+    droppedFiles.forEach(file => {
+      if (!allowedTypes.includes(file.type)) {
+        invalidFiles.push(`${file.name}: Invalid file type (only PDF, DOC, DOCX, TXT allowed)`);
+      } else if (file.size > maxSize) {
+        invalidFiles.push(`${file.name}: File too large (max 10MB)`);
+      } else {
+        validFiles.push(file);
+      }
+    });
+    
+    // Show validation errors if any
+    if (invalidFiles.length > 0) {
+      toast({
+        title: "File Validation Error",
+        description: invalidFiles.join('\n'),
+        variant: "destructive",
+      });
+    }
+    
+    // Add valid files
+    if (validFiles.length > 0) {
+      setUploadFiles(prev => [...prev, ...validFiles]);
+      toast({
+        title: "Files Added",
+        description: `${validFiles.length} file(s) added successfully.`,
+      });
+    }
   };
 
   const handleFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const files = Array.from(e.target.files);
-      setUploadFiles(prev => [...prev, ...files]);
+      const selectedFiles = Array.from(e.target.files);
+      
+      // Validate file types and sizes
+      const validFiles: File[] = [];
+      const invalidFiles: string[] = [];
+      const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      
+      selectedFiles.forEach(file => {
+        if (!allowedTypes.includes(file.type)) {
+          invalidFiles.push(`${file.name}: Invalid file type (only PDF, DOC, DOCX, TXT allowed)`);
+        } else if (file.size > maxSize) {
+          invalidFiles.push(`${file.name}: File too large (max 10MB)`);
+        } else {
+          validFiles.push(file);
+        }
+      });
+      
+      // Show validation errors if any
+      if (invalidFiles.length > 0) {
+        toast({
+          title: "File Validation Error",
+          description: invalidFiles.join('\n'),
+          variant: "destructive",
+        });
+      }
+      
+      // Add valid files
+      if (validFiles.length > 0) {
+        setUploadFiles(prev => [...prev, ...validFiles]);
+        toast({
+          title: "Files Added",
+          description: `${validFiles.length} file(s) added successfully.`,
+        });
+      }
+      
+      // Reset input
+      e.target.value = '';
     }
   };
 
