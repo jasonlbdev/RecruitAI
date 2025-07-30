@@ -18,12 +18,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const db = await getMemoryDB();
     
-    // Get OpenAI API key from settings
-    const apiKeySetting = db.system_settings.find((s: any) => s.key === 'openai_api_key');
+    // Get Grok API key from settings
+    const apiKeySetting = db.system_settings.find((s: any) => s.key === 'grok_api_key');
+    
     if (!apiKeySetting || !apiKeySetting.value) {
-      return res.status(500).json({
+      return res.status(400).json({
         success: false,
-        error: 'OpenAI API key not configured'
+        error: 'Grok API key not configured'
       });
     }
 

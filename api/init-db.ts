@@ -84,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Database reset/initialization (for development only)
     if (req.body?.action === 'reset') {
       return res.status(200).json({
-        success: true,
+      success: true,
         message: 'Database reset is handled by running the schema.sql file directly in Neon dashboard'
       });
     }

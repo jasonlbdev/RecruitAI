@@ -5,10 +5,10 @@ let memoryDB = {
   candidates: [] as any[],
   applications: [] as any[],
   system_settings: [
-    { key: 'openai_api_key', value: '', updatedAt: new Date().toISOString() },
-    { key: 'max_tokens', value: '1000', updatedAt: new Date().toISOString() },
-    { key: 'temperature', value: '0.3', updatedAt: new Date().toISOString() },
-    { key: 'model', value: 'gpt-4', updatedAt: new Date().toISOString() }
+    { key: 'grok_api_key', value: '', updatedAt: new Date().toISOString() },
+    { key: 'max_tokens', value: '1500', updatedAt: new Date().toISOString() },
+    { key: 'temperature', value: '0.7', updatedAt: new Date().toISOString() },
+    { key: 'model', value: 'grok-beta', updatedAt: new Date().toISOString() }
   ],
   prompts: [
     { 
@@ -26,7 +26,7 @@ function getMemoryDB() {
 // Rate limiting - simple in-memory approach (use Redis in production)
 const requestTimes: number[] = [];
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_MINUTE = 50; // OpenAI rate limit
+const MAX_REQUESTS_PER_MINUTE = 100; // Grok rate limit
 
 function checkRateLimit(): boolean {
   const now = Date.now();

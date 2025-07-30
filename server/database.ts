@@ -345,7 +345,7 @@ async function insertDefaultData() {
     const defaultSettings = [
       { key: 'max_tokens', value: '1500', description: 'Maximum tokens for AI responses' },
       { key: 'temperature', value: '0.1', description: 'AI temperature setting for consistency' },
-      { key: 'model', value: 'gpt-4', description: 'Default OpenAI model to use' },
+      { key: 'model', value: 'grok-beta', description: 'Default Grok model to use' },
       { key: 'app_name', value: 'RecruitAI', description: 'Application name', is_public: 1 },
       { key: 'app_version', value: '1.0.0', description: 'Application version', is_public: 1 }
     ];
