@@ -1,5 +1,4 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '../lib/database';
 import { 
   getAllJobs, 
   getAllCandidates, 
@@ -11,6 +10,10 @@ import {
 // Database schema creation
 async function createDatabaseSchema() {
   try {
+    // Import Neon dynamically
+    const { neon } = await import('@neondatabase/serverless');
+    const sql = neon(process.env.DATABASE_URL!);
+    
     // Create jobs table
     await sql`
       CREATE TABLE IF NOT EXISTS jobs (

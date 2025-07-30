@@ -1,22 +1,27 @@
-import { neon } from '@neondatabase/serverless';
+// Dynamic database connection
+let sql: any = null;
 
-// Initialize database connection with fallback
-let sql: any;
-
-try {
-  if (process.env.DATABASE_URL) {
-    sql = neon(process.env.DATABASE_URL);
-  } else {
-    console.warn('DATABASE_URL not configured - using fallback mode');
-    // Create a mock sql function for development
+async function getSql() {
+  if (sql) return sql;
+  
+  try {
+    if (process.env.DATABASE_URL) {
+      const { neon } = await import('@neondatabase/serverless');
+      sql = neon(process.env.DATABASE_URL);
+      return sql;
+    } else {
+      console.warn('DATABASE_URL not configured - using fallback mode');
+      sql = () => Promise.resolve([]);
+      return sql;
+    }
+  } catch (error) {
+    console.error('Database initialization error:', error);
     sql = () => Promise.resolve([]);
+    return sql;
   }
-} catch (error) {
-  console.error('Database initialization error:', error);
-  sql = () => Promise.resolve([]);
 }
 
-export { sql };
+export { getSql };
 
 // Default system settings for fallback
 const DEFAULT_SETTINGS = [
@@ -36,6 +41,7 @@ export async function getAllJobs() {
     if (!process.env.DATABASE_URL) {
       return []; // Return empty array if no database
     }
+    const sql = await getSql();
     const result = await sql`SELECT * FROM jobs ORDER BY created_at DESC`;
     return result;
   } catch (error) {
@@ -49,6 +55,7 @@ export async function getJobById(id: string) {
     if (!process.env.DATABASE_URL) {
       return null;
     }
+    const sql = await getSql();
     const result = await sql`SELECT * FROM jobs WHERE id = ${id}`;
     return result[0] || null;
   } catch (error) {
@@ -62,6 +69,7 @@ export async function getAllCandidates() {
     if (!process.env.DATABASE_URL) {
       return [];
     }
+    const sql = await getSql();
     const result = await sql`SELECT * FROM candidates ORDER BY created_at DESC`;
     return result;
   } catch (error) {
@@ -75,6 +83,7 @@ export async function getCandidateById(id: string) {
     if (!process.env.DATABASE_URL) {
       return null;
     }
+    const sql = await getSql();
     const result = await sql`SELECT * FROM candidates WHERE id = ${id}`;
     return result[0] || null;
   } catch (error) {
@@ -88,6 +97,7 @@ export async function getAllApplications() {
     if (!process.env.DATABASE_URL) {
       return [];
     }
+    const sql = await getSql();
     const result = await sql`SELECT * FROM applications ORDER BY created_at DESC`;
     return result;
   } catch (error) {
@@ -99,80 +109,160 @@ export async function getAllApplications() {
 export async function createJob(jobData: any) {
   try {
     if (!process.env.DATABASE_URL) {
-      // Return mock job for development
-      return {
-        id: `job_${Date.now()}`,
-        ...jobData,
-        created_at: new Date().toISOString()
-      };
+      return null;
     }
-    
+    const sql = await getSql();
     const result = await sql`
-      INSERT INTO jobs (title, department, location, description, requirements, skills, experience_level, salary_min, salary_max, is_remote, status, scoring_weights)
-      VALUES (${jobData.title}, ${jobData.department}, ${jobData.location}, ${jobData.description}, 
-              ${JSON.stringify(jobData.requirements || [])}, ${JSON.stringify(jobData.skills || [])}, 
-              ${jobData.experience_level}, ${jobData.salary_min}, ${jobData.salary_max}, 
-              ${jobData.is_remote || false}, ${jobData.status || 'active'}, 
-              ${JSON.stringify(jobData.scoring_weights || {})})
+      INSERT INTO jobs (title, company, location, description, requirements, salary_range, status)
+      VALUES (${jobData.title}, ${jobData.company}, ${jobData.location}, ${jobData.description}, ${jobData.requirements}, ${jobData.salary_range}, ${jobData.status || 'active'})
       RETURNING *
     `;
     return result[0];
   } catch (error) {
     console.error('Database error in createJob:', error);
-    throw error;
+    return null;
+  }
+}
+
+export async function updateJob(id: string, jobData: any) {
+  try {
+    if (!process.env.DATABASE_URL) {
+      return null;
+    }
+    const sql = await getSql();
+    const result = await sql`
+      UPDATE jobs 
+      SET title = ${jobData.title}, company = ${jobData.company}, location = ${jobData.location}, 
+          description = ${jobData.description}, requirements = ${jobData.requirements}, 
+          salary_range = ${jobData.salary_range}, status = ${jobData.status}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${id}
+      RETURNING *
+    `;
+    return result[0];
+  } catch (error) {
+    console.error('Database error in updateJob:', error);
+    return null;
+  }
+}
+
+export async function deleteJob(id: string) {
+  try {
+    if (!process.env.DATABASE_URL) {
+      return false;
+    }
+    const sql = await getSql();
+    await sql`DELETE FROM jobs WHERE id = ${id}`;
+    return true;
+  } catch (error) {
+    console.error('Database error in deleteJob:', error);
+    return false;
   }
 }
 
 export async function createCandidate(candidateData: any) {
   try {
     if (!process.env.DATABASE_URL) {
-      // Return mock candidate for development
-      return {
-        id: `candidate_${Date.now()}`,
-        ...candidateData,
-        created_at: new Date().toISOString()
-      };
+      return null;
     }
-
+    const sql = await getSql();
     const result = await sql`
-      INSERT INTO candidates (first_name, last_name, email, phone, location, current_position, current_company, years_of_experience, skills, resume_text, resume_blob_url, ai_score, ai_analysis, status)
-      VALUES (${candidateData.firstName}, ${candidateData.lastName}, ${candidateData.email}, 
-              ${candidateData.phone}, ${candidateData.location}, ${candidateData.currentPosition}, 
-              ${candidateData.currentCompany}, ${candidateData.yearsOfExperience}, 
-              ${JSON.stringify(candidateData.skills || [])}, ${candidateData.resumeText}, 
-              ${candidateData.resumeBlobUrl}, ${candidateData.aiScore || 0}, 
-              ${candidateData.aiAnalysis || ''}, ${candidateData.status || 'active'})
+      INSERT INTO candidates (name, email, phone, resume_url, skills, experience_years, current_position)
+      VALUES (${candidateData.name}, ${candidateData.email}, ${candidateData.phone}, ${candidateData.resume_url}, ${candidateData.skills}, ${candidateData.experience_years}, ${candidateData.current_position})
       RETURNING *
     `;
     return result[0];
   } catch (error) {
     console.error('Database error in createCandidate:', error);
-    throw error;
+    return null;
+  }
+}
+
+export async function updateCandidate(id: string, candidateData: any) {
+  try {
+    if (!process.env.DATABASE_URL) {
+      return null;
+    }
+    const sql = await getSql();
+    const result = await sql`
+      UPDATE candidates 
+      SET name = ${candidateData.name}, email = ${candidateData.email}, phone = ${candidateData.phone}, 
+          resume_url = ${candidateData.resume_url}, skills = ${candidateData.skills}, 
+          experience_years = ${candidateData.experience_years}, current_position = ${candidateData.current_position}, 
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${id}
+      RETURNING *
+    `;
+    return result[0];
+  } catch (error) {
+    console.error('Database error in updateCandidate:', error);
+    return null;
+  }
+}
+
+export async function deleteCandidate(id: string) {
+  try {
+    if (!process.env.DATABASE_URL) {
+      return false;
+    }
+    const sql = await getSql();
+    await sql`DELETE FROM candidates WHERE id = ${id}`;
+    return true;
+  } catch (error) {
+    console.error('Database error in deleteCandidate:', error);
+    return false;
   }
 }
 
 export async function createApplication(applicationData: any) {
   try {
     if (!process.env.DATABASE_URL) {
-      // Return mock application for development
-      return {
-        id: `app_${Date.now()}`,
-        ...applicationData,
-        created_at: new Date().toISOString()
-      };
+      return null;
     }
-
+    const sql = await getSql();
     const result = await sql`
-      INSERT INTO applications (candidate_id, job_id, status, applied_date, stage, notes)
-      VALUES (${applicationData.candidateId}, ${applicationData.jobId}, 
-              ${applicationData.status || 'new'}, ${applicationData.appliedDate || new Date().toISOString().split('T')[0]}, 
-              ${applicationData.stage || 'Application Submitted'}, ${applicationData.notes || ''})
+      INSERT INTO applications (job_id, candidate_id, status, ai_analysis, ai_provider, usage)
+      VALUES (${applicationData.job_id}, ${applicationData.candidate_id}, ${applicationData.status || 'pending'}, ${JSON.stringify(applicationData.ai_analysis)}, ${applicationData.ai_provider}, ${JSON.stringify(applicationData.usage)})
       RETURNING *
     `;
     return result[0];
   } catch (error) {
     console.error('Database error in createApplication:', error);
-    throw error;
+    return null;
+  }
+}
+
+export async function updateApplication(id: string, applicationData: any) {
+  try {
+    if (!process.env.DATABASE_URL) {
+      return null;
+    }
+    const sql = await getSql();
+    const result = await sql`
+      UPDATE applications 
+      SET status = ${applicationData.status}, ai_analysis = ${JSON.stringify(applicationData.ai_analysis)}, 
+          ai_provider = ${applicationData.ai_provider}, usage = ${JSON.stringify(applicationData.usage)}, 
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${id}
+      RETURNING *
+    `;
+    return result[0];
+  } catch (error) {
+    console.error('Database error in updateApplication:', error);
+    return null;
+  }
+}
+
+export async function deleteApplication(id: string) {
+  try {
+    if (!process.env.DATABASE_URL) {
+      return false;
+    }
+    const sql = await getSql();
+    await sql`DELETE FROM applications WHERE id = ${id}`;
+    return true;
+  } catch (error) {
+    console.error('Database error in deleteApplication:', error);
+    return false;
   }
 }
 
@@ -181,7 +271,8 @@ export async function getSystemSettings() {
     if (!process.env.DATABASE_URL) {
       return DEFAULT_SETTINGS;
     }
-    const result = await sql`SELECT key, value FROM system_settings WHERE is_public = 1 OR is_public = 0`;
+    const sql = await getSql();
+    const result = await sql`SELECT * FROM system_settings ORDER BY key`;
     return result.length > 0 ? result : DEFAULT_SETTINGS;
   } catch (error) {
     console.error('Database error in getSystemSettings:', error);
@@ -192,20 +283,20 @@ export async function getSystemSettings() {
 export async function updateSystemSetting(key: string, value: string) {
   try {
     if (!process.env.DATABASE_URL) {
-      console.log(`Mock update: ${key} = ${value}`);
-      return true;
+      return false;
     }
-    
+    const sql = await getSql();
     await sql`
       INSERT INTO system_settings (key, value, updated_at) 
-      VALUES (${key}, ${value}, NOW()) 
-      ON CONFLICT (key) 
-      DO UPDATE SET value = ${value}, updated_at = NOW()
+      VALUES (${key}, ${value}, CURRENT_TIMESTAMP)
+      ON CONFLICT (key) DO UPDATE SET 
+        value = EXCLUDED.value, 
+        updated_at = CURRENT_TIMESTAMP
     `;
     return true;
   } catch (error) {
     console.error('Database error in updateSystemSetting:', error);
-    throw error;
+    return false;
   }
 }
 
@@ -215,13 +306,12 @@ export async function getSystemSetting(key: string): Promise<string | null> {
       const setting = DEFAULT_SETTINGS.find(s => s.key === key);
       return setting ? setting.value : null;
     }
-    
+    const sql = await getSql();
     const result = await sql`SELECT value FROM system_settings WHERE key = ${key}`;
     return result[0]?.value || null;
   } catch (error) {
     console.error('Database error in getSystemSetting:', error);
-    const setting = DEFAULT_SETTINGS.find(s => s.key === key);
-    return setting ? setting.value : null;
+    return null;
   }
 }
 
@@ -230,60 +320,47 @@ export async function getDashboardMetrics() {
     if (!process.env.DATABASE_URL) {
       return {
         totalJobs: 0,
-        activeJobs: 0,
         totalCandidates: 0,
         totalApplications: 0,
-        newApplicationsToday: 0,
-        statusBreakdown: {
-          new: 0,
-          reviewing: 0,
-          interviewed: 0,
-          offered: 0,
-          hired: 0,
-          rejected: 0
-        }
+        recentApplications: [],
+        topPerformingJobs: [],
+        growthMetrics: { jobs: 0, candidates: 0, applications: 0 }
       };
     }
-
-    const [jobs, candidates, applications] = await Promise.all([
+    const sql = await getSql();
+    
+    const [jobsCount, candidatesCount, applicationsCount] = await Promise.all([
       sql`SELECT COUNT(*) as count FROM jobs`,
       sql`SELECT COUNT(*) as count FROM candidates`,
       sql`SELECT COUNT(*) as count FROM applications`
     ]);
 
-    const activeJobs = await sql`SELECT COUNT(*) as count FROM jobs WHERE status = 'active'`;
-    
+    const recentApplications = await sql`
+      SELECT a.*, j.title as job_title, c.name as candidate_name 
+      FROM applications a 
+      JOIN jobs j ON a.job_id = j.id 
+      JOIN candidates c ON a.candidate_id = c.id 
+      ORDER BY a.applied_at DESC 
+      LIMIT 5
+    `;
+
     return {
-      totalJobs: parseInt(jobs[0]?.count || '0'),
-      activeJobs: parseInt(activeJobs[0]?.count || '0'),
-      totalCandidates: parseInt(candidates[0]?.count || '0'),
-      totalApplications: parseInt(applications[0]?.count || '0'),
-      newApplicationsToday: 0, // Simplified for now
-      statusBreakdown: {
-        new: 0,
-        reviewing: 0,
-        interviewed: 0,
-        offered: 0,
-        hired: 0,
-        rejected: 0
-      }
+      totalJobs: jobsCount[0]?.count || 0,
+      totalCandidates: candidatesCount[0]?.count || 0,
+      totalApplications: applicationsCount[0]?.count || 0,
+      recentApplications: recentApplications || [],
+      topPerformingJobs: [], // Placeholder
+      growthMetrics: { jobs: 0, candidates: 0, applications: 0 } // Placeholder
     };
   } catch (error) {
     console.error('Database error in getDashboardMetrics:', error);
     return {
       totalJobs: 0,
-      activeJobs: 0,
       totalCandidates: 0,
       totalApplications: 0,
-      newApplicationsToday: 0,
-      statusBreakdown: {
-        new: 0,
-        reviewing: 0,
-        interviewed: 0,
-        offered: 0,
-        hired: 0,
-        rejected: 0
-      }
+      recentApplications: [],
+      topPerformingJobs: [],
+      growthMetrics: { jobs: 0, candidates: 0, applications: 0 }
     };
   }
 } 
