@@ -80,6 +80,25 @@ async function initializeDatabase() {
       )
     `;
 
+    // Create candidate_scores table
+    await sql`
+      CREATE TABLE IF NOT EXISTS candidate_scores (
+        id SERIAL PRIMARY KEY,
+        candidate_id VARCHAR(255) NOT NULL,
+        job_id VARCHAR(255) NOT NULL,
+        overall_score INTEGER NOT NULL,
+        experience_score INTEGER NOT NULL,
+        skills_score INTEGER NOT NULL,
+        education_score INTEGER NOT NULL,
+        location_score INTEGER NOT NULL,
+        salary_score INTEGER NOT NULL,
+        ai_analysis_score INTEGER NOT NULL,
+        breakdown JSONB NOT NULL,
+        recommendations TEXT[],
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `;
+
     // Create audit_logs table
     await sql`
       CREATE TABLE IF NOT EXISTS audit_logs (
