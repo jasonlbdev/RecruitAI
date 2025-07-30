@@ -169,8 +169,7 @@ export default function Jobs() {
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (departmentFilter !== 'all') params.append('department', departmentFilter);
       
-      // Temporarily use the working jobs API
-      const response = await fetch(`/api/jobs-working?${params.toString()}`);
+      const response = await fetch(`/api/jobs?${params.toString()}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -302,7 +301,7 @@ export default function Jobs() {
         status: 'active'
       };
 
-      const response = await fetch('/api/jobs-working', {
+      const response = await fetch('/api/jobs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
