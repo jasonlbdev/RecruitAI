@@ -1,5 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
+import { xai } from '@ai-sdk/xai';
+import { generateText } from 'ai';
 import { getMemoryDB } from './init-db';
 import { createCandidate, createApplication } from '../lib/database';
 
@@ -48,188 +50,77 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const db = await getMemoryDB();
 
-    // Get Grok API key
-    const apiKeySetting = db.system_settings.find((s: any) => s.key === 'grok_api_key');
-    
-    if (!apiKeySetting || !apiKeySetting.value) {
-      return res.status(400).json({
-        success: false,
-        error: 'Grok API key not configured. Please configure in Settings.'
-      });
-    }
-
     // Get job details if jobId provided
     let jobDetails: any = null;
     if (jobId) {
-      jobDetails = db.jobs.find((j: any) => j.id === jobId);
+      jobDetails = db.jobs?.find((j: any) => j.id === jobId);
     }
 
-    // Prepare AI analysis prompt
+    // Get AI configuration and generate analysis
+    const { generateAIText, getAIConfig } = await import('../lib/ai-providers');
+    const aiConfig = await getAIConfig(db);
+
+    // Get prompts from system settings
+    const systemPromptSetting = db.system_settings.find((s: any) => s.key === 'system_prompt');
     const resumeAnalysisPromptSetting = db.system_settings.find((s: any) => s.key === 'resume_analysis_prompt');
-    let analysisPrompt = resumeAnalysisPromptSetting?.value || 'Analyze this resume and extract candidate information.';
-    
-    // Get job-specific scoring weights (with defaults)
-    const weights = jobDetails?.scoringWeights || {
-      experience: 30, skills: 30, location: 15, education: 15, salary: 10
-    };
+
+    // Build context-aware prompt
+    let finalPrompt = resumeAnalysisPromptSetting?.value || 'Analyze this resume and extract key information.';
     
     if (jobDetails) {
-      // Create weighted emphasis for extraction
-      const weightedInstructions = `
-**EXTRACTION PRIORITIES FOR THIS ${jobDetails.title} ROLE:**
-- Experience/Career Level: ${weights.experience}% weight - ${weights.experience > 30 ? 'CRITICAL FOCUS' : weights.experience > 20 ? 'HIGH FOCUS' : 'STANDARD FOCUS'}
-- Technical Skills Match: ${weights.skills}% weight - ${weights.skills > 30 ? 'CRITICAL FOCUS' : weights.skills > 20 ? 'HIGH FOCUS' : 'STANDARD FOCUS'}  
-- Location/Remote Compatibility: ${weights.location}% weight - ${weights.location > 20 ? 'CRITICAL FOCUS' : weights.location > 10 ? 'HIGH FOCUS' : 'STANDARD FOCUS'}
-- Education Requirements: ${weights.education}% weight - ${weights.education > 20 ? 'CRITICAL FOCUS' : weights.education > 10 ? 'HIGH FOCUS' : 'STANDARD FOCUS'}
-- Salary Alignment: ${weights.salary}% weight - ${weights.salary > 15 ? 'CRITICAL FOCUS' : weights.salary > 10 ? 'HIGH FOCUS' : 'STANDARD FOCUS'}
+      finalPrompt = `${systemPromptSetting?.value || 'You are an expert recruitment assistant.'}\n\n
+JOB CONTEXT:
+- Title: ${jobDetails.title}
+- Department: ${jobDetails.department || 'Not specified'}
+- Requirements: ${JSON.stringify(jobDetails.requirements || [])}
+- Skills: ${JSON.stringify(jobDetails.skills || [])}
+- Experience Level: ${jobDetails.experience_level || 'Not specified'}
+- Scoring Weights: ${JSON.stringify(jobDetails.scoring_weights || {})}
 
-**JOB CONTEXT:**
-- Position: ${jobDetails.title}
-- Department: ${jobDetails.department}
-- Required Experience Level: ${jobDetails.experienceLevel}
-- Location: ${jobDetails.location} ${jobDetails.isRemote ? '(Remote Work Available)' : '(On-site Required)'}
-- Salary Budget: $${jobDetails.salaryMin || 'TBD'} - $${jobDetails.salaryMax || 'TBD'}
-- Key Requirements: ${jobDetails.requirements?.join(', ') || 'See job description'}
+${finalPrompt}
 
-**GIVE DETAILED ANALYSIS IN CRITICAL/HIGH FOCUS AREAS**`;
-
-      // Replace template variables with job-specific data
-      analysisPrompt = analysisPrompt
-        .replace('{resume_text}', fileContent)
-        .replace('{job_requirements}', jobDetails.requirements?.join(', ') || 'Not specified')
-        .replace('{job_description}', jobDetails.description || 'Not specified');
-
-      // Enhance prompt with job-specific context
-      analysisPrompt = `${analysisPrompt}
-
-${weightedInstructions}`;
+Resume Content: ${fileContent}`;
+    } else {
+      finalPrompt = `${systemPromptSetting?.value || 'You are an expert recruitment assistant.'}\n\n${finalPrompt}\n\nResume Content: ${fileContent}`;
     }
 
-    // Enhanced prompt for structured data extraction with job-specific scoring
-    const extractionPrompt = `${analysisPrompt}
-
-IMPORTANT: Please extract the following information and return it as a JSON object.
-Pay special attention to the CRITICAL FOCUS and HIGH FOCUS areas mentioned above.
-
-{
-  "firstName": "extracted first name",
-  "lastName": "extracted last name", 
-  "email": "extracted email",
-  "phone": "extracted phone",
-  "location": "extracted location",
-  "currentPosition": "current job title",
-  "currentCompany": "current company",
-  "yearsOfExperience": "estimated years as number",
-  "skills": {
-    "programmingLanguages": ["JavaScript", "Python", "etc"],
-    "frameworks": ["React", "Node.js", "etc"],
-    "tools": ["AWS", "Docker", "etc"],
-    "databases": ["PostgreSQL", "MongoDB", "etc"],
-    "softSkills": ["Leadership", "Communication", "etc"],
-    "certifications": ["AWS Certified", "PMP", "etc"],
-    "allSkills": ["comprehensive list of all skills found"]
-  },
-  "summary": "professional summary",
-  "education": {
-    "degree": "highest degree",
-    "institution": "university/school name", 
-    "graduationYear": "year if found",
-    "gpa": "if mentioned"
-  },
-  "workExperience": [
-    {
-      "company": "company name",
-      "position": "job title", 
-      "duration": "time period",
-      "achievements": ["key achievement 1", "key achievement 2"]
-    }
-  ],
-  "overallScore": "score 0-100 for job match based on weighted priorities",
-  "keyStrengths": ["strength1", "strength2"],
-  "concerns": ["concern1", "concern2"],
-  "recommendation": "STRONG_MATCH, GOOD_MATCH, POTENTIAL_MATCH, or POOR_MATCH",
-  "experienceScore": "0-100 score for experience match (${jobDetails ? weights.experience + '% weight' : 'standard weight'})",
-  "skillsScore": "0-100 score for skills match (${jobDetails ? weights.skills + '% weight' : 'standard weight'})", 
-  "locationScore": "0-100 score for location preference (${jobDetails ? weights.location + '% weight' : 'standard weight'})",
-  "educationScore": "0-100 score for education background (${jobDetails ? weights.education + '% weight' : 'standard weight'})",
-  "salaryScore": "0-100 score for salary expectations (${jobDetails ? weights.salary + '% weight' : 'standard weight'})",
-  "biasDetection": {
-    "potentialBias": ["any potential bias indicators"],
-    "diversityNotes": "notes on diversity considerations"
-  },
-  "aiAnalysisSummary": "comprehensive 2-3 sentence summary of candidate fit for this specific role"
-}
-
-Resume Content:
-${fileContent}`;
-
-    // Call Grok xAI API instead of OpenAI
-    const modelSetting = db.system_settings.find((s: any) => s.key === 'model');
-    const systemPromptSetting = db.system_settings.find((s: any) => s.key === 'system_prompt');
-
-    // Get Grok API key instead of OpenAI key
-    const grokApiKeySetting = db.system_settings.find((s: any) => s.key === 'grok_api_key');
-    if (!grokApiKeySetting || !grokApiKeySetting.value) {
-      return res.status(500).json({
-        success: false,
-        error: 'Grok API key not configured. Please configure in Settings.'
-      });
-    }
-
-    const grokResponse = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${grokApiKeySetting.value}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: modelSetting?.value || 'grok-beta',
-        messages: [
-          {
-            role: 'system',
-            content: systemPromptSetting?.value || 'You are an expert recruitment assistant. Extract candidate information accurately.'
-          },
-          {
-            role: 'user',
-            content: extractionPrompt
-          }
-        ],
-        max_tokens: 2000,
-        temperature: 0.3, // Lower temperature for more consistent extraction
-      }),
-    });
-
-    if (!grokResponse.ok) {
-      const errorText = await grokResponse.text();
-      throw new Error(`Grok API error: ${grokResponse.status} - ${errorText}`);
-    }
-
-    const grokData = await grokResponse.json();
-    const aiResponse = grokData.choices[0]?.message?.content;
-
-    if (!aiResponse) {
-      throw new Error('No response from AI');
-    }
-
-    // Try to parse JSON from AI response
+    // Use the new AI provider system
     let extractedData: any = {};
     try {
-      // Look for JSON in the response
-      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        extractedData = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found in AI response');
-      }
-    } catch (parseError) {
-      console.error('Failed to parse AI response as JSON:', aiResponse);
-      // Fallback to basic extraction
+      const result = await generateAIText(finalPrompt, aiConfig);
+      extractedData = parseAnalysisResponse(result.text || '');
+      extractedData.aiProvider = aiConfig.provider;
+      extractedData.usage = result.usage;
+    } catch (aiError) {
+      console.error('AI analysis error:', aiError);
       extractedData = {
         firstName: '',
         lastName: '',
         email: '',
-        summary: aiResponse,
+        summary: 'AI analysis failed',
         overallScore: 50,
+        recommendation: 'REQUIRES_REVIEW',
+        aiProvider: aiConfig.provider
+      };
+    }
+
+    // Helper function to parse AI response
+    function parseAnalysisResponse(response: string): any {
+      try {
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[0]);
+        }
+      } catch (parseError) {
+        console.error('Failed to parse AI response:', parseError);
+      }
+      
+      return {
+        firstName: '',
+        lastName: '',
+        email: '',
+        summary: response.substring(0, 500),
+        overallScore: 70,
         recommendation: 'REQUIRES_REVIEW'
       };
     }
@@ -259,7 +150,7 @@ ${fileContent}`;
       resumeFilePath: resumeBlobUrl,
       resumeText: fileContent,
       aiScore: extractedData.overallScore || 0,
-      aiAnalysis: aiResponse,
+      aiAnalysis: extractedData.summary || 'Analysis completed',
       aiAnalysisSummary: extractedData.aiAnalysisSummary || '',
       aiRecommendation: extractedData.recommendation || 'REQUIRES_REVIEW',
       aiScores: {
@@ -315,10 +206,10 @@ ${fileContent}`;
         applicationId: applicationId,
         aiAnalysis: {
           extractedData,
-          fullAnalysis: aiResponse,
-          jobSpecificWeights: weights,
+          fullAnalysis: extractedData.summary || 'Analysis completed',
+          jobSpecificWeights: jobDetails?.scoring_weights || {},
           processingTime: Date.now(),
-          tokensUsed: grokData.usage?.total_tokens || 0
+          tokensUsed: extractedData.usage?.totalTokens || 0
         }
       }
     });

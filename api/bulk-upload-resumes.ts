@@ -1,27 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-// In-memory storage (replace with real database in production)
-let memoryDB = {
-  candidates: [] as any[],
-  applications: [] as any[],
-  system_settings: [
-    { key: 'grok_api_key', value: '', updatedAt: new Date().toISOString() },
-    { key: 'max_tokens', value: '1500', updatedAt: new Date().toISOString() },
-    { key: 'temperature', value: '0.7', updatedAt: new Date().toISOString() },
-    { key: 'model', value: 'grok-beta', updatedAt: new Date().toISOString() }
-  ],
-  prompts: [
-    { 
-      key: 'resume_analysis_prompt', 
-      value: 'Analyze this resume for the given job requirements. Provide a detailed assessment including: 1) Overall match score (0-100), 2) Key strengths, 3) Potential concerns, 4) Recommendation (STRONG_MATCH, GOOD_MATCH, POTENTIAL_MATCH, or POOR_MATCH). Focus on the job requirements and use the provided scoring weights to prioritize different attributes.',
-      updatedAt: new Date().toISOString() 
-    }
-  ]
-};
-
-function getMemoryDB() {
-  return memoryDB;
-}
+import { VercelRequest, VercelResponse } from '@vercel/node';
+import { xai } from '@ai-sdk/xai';
+import { generateText } from 'ai';
+import { getMemoryDB } from './init-db';
+import { createCandidate, createApplication } from '../lib/database';
 
 // Rate limiting - simple in-memory approach (use Redis in production)
 const requestTimes: number[] = [];
@@ -214,17 +195,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const resume = resumes[i];
       
       try {
-        const extractedData = await processResumeWithAI(
-          resume.fileContent,
-          resume.fileName,
-          jobData,
-          grokApiKey
-        );
+        // Use the new dual AI provider system for analysis
+        let analysis = '';
+        try {
+          const { generateAIText, getAIConfig } = await import('../lib/ai-providers');
+          const aiConfig = await getAIConfig(db);
 
-        // Create candidate
-        const candidateId = `candidate_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const newCandidate = {
-          id: candidateId,
+          const systemPromptSetting = db.system_settings.find((s: any) => s.key === 'system_prompt');
+          const analysisPromptSetting = db.system_settings.find((s: any) => s.key === 'resume_analysis_prompt');
+
+          const systemPrompt = systemPromptSetting?.value || 'You are an expert recruitment assistant.';
+          const analysisPrompt = analysisPromptSetting?.value || 'Analyze this resume:';
+
+          const result = await generateAIText(
+            `${systemPrompt}\n\n${analysisPrompt}\n\nResume: ${resume.fileContent}`,
+            aiConfig
+          );
+
+          analysis = result.text || 'Analysis completed';
+        } catch (analysisError) {
+          console.error(`Analysis error for ${resume.fileName}:`, analysisError);
+          analysis = 'AI analysis failed - processing error';
+        }
+
+         // Parse analysis to extract structured data
+         let extractedData: any = {};
+         try {
+           const jsonMatch = analysis.match(/\{[\s\S]*\}/);
+           if (jsonMatch) {
+             extractedData = JSON.parse(jsonMatch[0]);
+           }
+         } catch (parseError) {
+           extractedData = {
+             firstName: '',
+             lastName: '',
+             email: '',
+             summary: analysis.substring(0, 200),
+             overallScore: 70
+           };
+         }
+
+         // Create candidate
+         const candidateData = await createCandidate({
+          id: `candidate_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           firstName: extractedData.firstName || '',
           lastName: extractedData.lastName || '',
           email: extractedData.email || '',
@@ -262,29 +275,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           biasDetection: extractedData.biasDetection || {},
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
-        };
+        });
 
         // Add candidate to database
-        db.candidates.push(newCandidate);
+        db.candidates.push(candidateData);
 
         // Create application
         const applicationId = `app_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const newApplication = {
           id: applicationId,
-          candidateId: candidateId,
-          candidateName: `${newCandidate.firstName} ${newCandidate.lastName}`,
+          candidateId: candidateData.id,
+          candidateName: `${candidateData.firstName} ${candidateData.lastName}`,
           jobId: jobId,
           position: jobData.title,
-          email: newCandidate.email,
-          phone: newCandidate.phone,
-          location: newCandidate.location,
+          email: candidateData.email,
+          phone: candidateData.phone,
+          location: candidateData.location,
           appliedDate: new Date().toISOString(),
           status: 'new',
           aiScore: extractedData.overallScore || 0,
           stage: 'application',
           resumeUrl: null,
           coverLetterUrl: null,
-          experience: newCandidate.yearsOfExperience?.toString() || '0',
+          experience: candidateData.yearsOfExperience?.toString() || '0',
           salaryExpectation: 'Not specified',
           source: 'bulk_upload',
           notes: `AI Analysis: ${extractedData.recommendation || 'Not specified'}`
@@ -295,7 +308,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         results.push({
           fileName: resume.fileName,
           success: true,
-          candidate: newCandidate,
+          candidate: candidateData,
           application: newApplication,
           analysis: {
             overallScore: extractedData.overallScore,

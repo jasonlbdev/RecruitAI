@@ -1,13 +1,22 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getMemoryDB } from './init-db';
+import { generateAIText, getAIConfig } from '../lib/ai-providers';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try {
-    if (req.method !== 'POST') {
-      return res.status(405).json({ success: false, error: 'Method not allowed' });
-    }
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    const { resumeText, jobId, candidateId } = req.body;
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, error: 'Method not allowed' });
+  }
+
+  try {
+    const { resumeText, jobId } = req.body;
 
     if (!resumeText) {
       return res.status(400).json({
@@ -18,149 +27,92 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const db = await getMemoryDB();
     
-    // Get Grok API key from settings
-    const apiKeySetting = db.system_settings.find((s: any) => s.key === 'grok_api_key');
-    
-    if (!apiKeySetting || !apiKeySetting.value) {
-      return res.status(400).json({
-        success: false,
-        error: 'Grok API key not configured'
-      });
-    }
-
     // Get job details if jobId provided
     let jobDetails: any = null;
     if (jobId) {
-      jobDetails = db.jobs.find((j: any) => j.id === jobId);
+      jobDetails = db.jobs?.find((job: any) => job.id === jobId) || null;
     }
 
-    // Get AI configuration
-    const maxTokensSetting = db.system_settings.find((s: any) => s.key === 'max_tokens');
-    const temperatureSetting = db.system_settings.find((s: any) => s.key === 'temperature');
-    const modelSetting = db.system_settings.find((s: any) => s.key === 'model');
-    const systemPromptSetting = db.system_settings.find((s: any) => s.key === 'system_prompt');
+    // Get AI prompts from system settings
     const resumeAnalysisPromptSetting = db.system_settings.find((s: any) => s.key === 'resume_analysis_prompt');
+    const systemPromptSetting = db.system_settings.find((s: any) => s.key === 'system_prompt');
+    
+    const resumeAnalysisPrompt = resumeAnalysisPromptSetting?.value || 'Analyze this resume and provide insights';
+    const systemPrompt = systemPromptSetting?.value || 'You are a helpful AI assistant';
 
-    // Create job-specific analysis prompt
-    let analysisPrompt = resumeAnalysisPromptSetting?.value || 'Analyze this resume and provide insights.';
+    // Build context-aware prompt
+    let analysisPrompt = resumeAnalysisPrompt;
     
     if (jobDetails) {
-      // Get job-specific scoring weights
-      const weights = jobDetails.scoringWeights || {
-        experience: 30, skills: 30, location: 15, education: 15, salary: 10
-      };
-
-      // Create weighted emphasis instructions
-      const weightedInstructions = `
-**SCORING PRIORITIES FOR THIS ROLE:**
-- Experience/Career Level: ${weights.experience}% weight - ${weights.experience > 30 ? 'HIGH PRIORITY' : weights.experience > 20 ? 'MEDIUM PRIORITY' : 'LOW PRIORITY'}
-- Technical Skills Match: ${weights.skills}% weight - ${weights.skills > 30 ? 'HIGH PRIORITY' : weights.skills > 20 ? 'MEDIUM PRIORITY' : 'LOW PRIORITY'}  
-- Location/Remote Preference: ${weights.location}% weight - ${weights.location > 20 ? 'HIGH PRIORITY' : weights.location > 10 ? 'MEDIUM PRIORITY' : 'LOW PRIORITY'}
-- Education Background: ${weights.education}% weight - ${weights.education > 20 ? 'HIGH PRIORITY' : weights.education > 10 ? 'MEDIUM PRIORITY' : 'LOW PRIORITY'}
-- Salary Expectations: ${weights.salary}% weight - ${weights.salary > 15 ? 'HIGH PRIORITY' : weights.salary > 10 ? 'MEDIUM PRIORITY' : 'LOW PRIORITY'}
-
-**FOCUS YOUR ANALYSIS ON THE HIGH PRIORITY AREAS ABOVE**`;
-
-      // Replace template variables with job-specific data
-      analysisPrompt = analysisPrompt
-        .replace('{resume_text}', resumeText)
-        .replace('{job_requirements}', jobDetails.requirements?.join(', ') || 'Not specified')
-        .replace('{job_description}', jobDetails.description || 'Not specified');
-
-      // Add job-specific context and weighted scoring instructions
-      analysisPrompt = `${analysisPrompt}
-
-**JOB-SPECIFIC CONTEXT:**
-- Position: ${jobDetails.title}
-- Department: ${jobDetails.department}
-- Experience Level Required: ${jobDetails.experienceLevel}
-- Location: ${jobDetails.location} ${jobDetails.isRemote ? '(Remote OK)' : '(On-site required)'}
-- Salary Range: $${jobDetails.salaryMin || 'Not specified'} - $${jobDetails.salaryMax || 'Not specified'}
-
-${weightedInstructions}
-
-**RESUME TO ANALYZE:**
-${resumeText}`;
-
+      const jobContext = `
+**JOB CONTEXT:**
+- Title: ${jobDetails.title}
+- Department: ${jobDetails.department || 'Not specified'}
+- Location: ${jobDetails.location || 'Not specified'}
+- Requirements: ${JSON.stringify(jobDetails.requirements || [])}
+- Skills: ${JSON.stringify(jobDetails.skills || [])}
+- Experience Level: ${jobDetails.experience_level || 'Not specified'}
+- Scoring Weights: ${JSON.stringify(jobDetails.scoring_weights || {})}
+`;
+      
+      analysisPrompt = `${systemPrompt}\n\n${jobContext}\n\n${resumeAnalysisPrompt}\n\n**RESUME TEXT:**\n${resumeText}`;
     } else {
-      analysisPrompt = `Analyze the following resume and provide comprehensive insights:\n\n${resumeText}`;
+      analysisPrompt = `${systemPrompt}\n\n${resumeAnalysisPrompt}\n\n**RESUME TEXT:**\n${resumeText}`;
     }
 
-    // Make Grok xAI API call instead of OpenAI
+    // Get AI configuration and generate analysis
+    const aiConfig = await getAIConfig(db);
+    const result = await generateAIText(analysisPrompt, aiConfig);
+
+    // Parse AI response
+    let analysisData;
     try {
-      // Get Grok API key instead of OpenAI key
-      const grokApiKeySetting = db.system_settings.find((s: any) => s.key === 'grok_api_key');
-      if (!grokApiKeySetting || !grokApiKeySetting.value) {
-        throw new Error('Grok API key not configured');
+      // Try to extract JSON from the response
+      const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        analysisData = JSON.parse(jsonMatch[0]);
+      } else {
+        // Fallback to plain text response
+        analysisData = {
+          overallScore: 75,
+          summary: result.text,
+          skills: [],
+          experience: 'Not specified',
+          recommendation: 'CONSIDER',
+          provider: aiConfig.provider
+        };
       }
-
-      const grokResponse = await fetch('https://api.x.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${grokApiKeySetting.value}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: modelSetting?.value || 'grok-beta',
-          messages: [
-            {
-              role: 'system',
-              content: systemPromptSetting?.value || 'You are an expert recruitment assistant.'
-            },
-            {
-              role: 'user',
-              content: analysisPrompt
-            }
-          ],
-          max_tokens: parseInt(maxTokensSetting?.value || '1500'),
-          temperature: parseFloat(temperatureSetting?.value || '0.7'),
-        }),
-      });
-
-      if (!grokResponse.ok) {
-        throw new Error(`Grok API error: ${grokResponse.status}`);
-      }
-
-      const grokData = await grokResponse.json();
-      const analysis = grokData.choices[0]?.message?.content;
-
-      if (!analysis) {
-        throw new Error('No analysis received from Grok');
-      }
-
-      // Save analysis result if candidateId provided
-      if (candidateId) {
-        const candidate = db.candidates.find((c: any) => c.id === candidateId);
-        if (candidate) {
-          candidate.aiAnalysis = analysis;
-          candidate.lastAnalyzed = new Date().toISOString();
-          candidate.updatedAt = new Date().toISOString();
-        }
-      }
-
-      res.json({
-        success: true,
-        data: {
-          analysis,
-          jobId,
-          candidateId,
-          timestamp: new Date().toISOString()
-        }
-      });
-
-    } catch (apiError) {
-      console.error('Grok API error:', apiError);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to analyze resume with AI'
-      });
+    } catch (parseError) {
+      console.error('Error parsing AI response:', parseError);
+      analysisData = {
+        overallScore: 70,
+        summary: result.text.substring(0, 500),
+        skills: [],
+        experience: 'Analysis completed',
+        recommendation: 'CONSIDER',
+        provider: aiConfig.provider
+      };
     }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        analysis: analysisData,
+        aiProvider: aiConfig.provider,
+        usage: result.usage,
+        jobContext: jobDetails ? {
+          title: jobDetails.title,
+          department: jobDetails.department,
+          scoringWeights: jobDetails.scoring_weights
+        } : null
+      }
+    });
 
   } catch (error) {
     console.error('AI analysis error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: error.message || 'Failed to analyze resume with AI'
     });
   }
 } 

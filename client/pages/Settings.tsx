@@ -24,6 +24,10 @@ interface SystemSettings {
   max_tokens: string;
   temperature: string;
   model: string;
+  ai_provider?: string;
+  openai_model?: string;
+  xai_api_key?: string;
+  xai_model?: string;
 }
 
 interface PromptTemplate {
