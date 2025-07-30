@@ -1,4 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
+import { logAuditEvent } from './audit-logs';
 
 // Inline database functions - no external imports
 async function getAllJobs() {
@@ -128,53 +129,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST') {
       const jobData = req.body;
       const newJob = await createJob(jobData);
-      
-      if (!newJob) {
+
+      if (newJob) {
+        // Log audit event
+        await logAuditEvent('job', newJob.id, 'create', undefined, undefined, { job: newJob });
+        
+        return res.status(201).json({
+          success: true,
+          data: newJob
+        });
+      } else {
         return res.status(500).json({
           success: false,
           error: 'Failed to create job'
         });
       }
-
-      return res.status(201).json({
-        success: true,
-        job: newJob
-      });
     }
 
     // PUT /api/jobs?id=123 - Update job
     if (req.method === 'PUT' && id) {
       const jobData = req.body;
-      const updatedJob = await updateJob(id as string, jobData);
-      
-      if (!updatedJob) {
+      const jobId = id as string;
+      const existingJob = await getJobById(jobId);
+
+      if (!existingJob) {
         return res.status(404).json({
           success: false,
-          error: 'Job not found or update failed'
+          error: 'Job not found'
         });
       }
 
-      return res.status(200).json({
-        success: true,
-        job: updatedJob
-      });
+      const updatedJob = await updateJob(jobId, jobData);
+
+      if (updatedJob) {
+        // Log audit event
+        await logAuditEvent('job', jobId, 'update', undefined, undefined, { 
+          before: existingJob, 
+          after: updatedJob 
+        });
+        
+        return res.status(200).json({
+          success: true,
+          data: updatedJob
+        });
+      } else {
+        return res.status(404).json({
+          success: false,
+          error: 'Job not found'
+        });
+      }
     }
 
     // DELETE /api/jobs?id=123 - Delete job
     if (req.method === 'DELETE' && id) {
-      const deleted = await deleteJob(id as string);
-      
-      if (!deleted) {
+      const deletedJob = await deleteJob(id as string);
+
+      if (deletedJob) {
+        // Log audit event
+        await logAuditEvent('job', id as string, 'delete', undefined, undefined, { job: deletedJob });
+        
+        return res.status(200).json({
+          success: true,
+          message: 'Job deleted successfully'
+        });
+      } else {
         return res.status(404).json({
           success: false,
-          error: 'Job not found or delete failed'
+          error: 'Job not found'
         });
       }
-
-      return res.status(200).json({
-        success: true,
-        message: 'Job deleted successfully'
-      });
     }
 
     return res.status(405).json({

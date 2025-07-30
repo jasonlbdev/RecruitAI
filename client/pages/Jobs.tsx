@@ -55,8 +55,10 @@ import {
   Pause,
   Archive,
   MoreHorizontal,
+  History as HistoryIcon,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import AuditLogModal from '@/components/AuditLogModal';
 
 interface Job {
   id: string;
@@ -112,8 +114,9 @@ export default function Jobs() {
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -344,20 +347,20 @@ export default function Jobs() {
     }
   };
 
-  const handleViewJobDetails = (job: Job) => {
+  const handleViewJob = (job: Job) => {
     setSelectedJob(job);
     setIsViewModalOpen(true);
-    // TODO: Implement audit log system
-    // const response = await fetch(`/api/settings?action=audit-log&entityType=job&entityId=${jobId}`);
-    console.log('Audit log system not yet implemented');
+    loadAuditHistory(job.id);
   };
 
   const loadAuditHistory = async (jobId: string) => {
     setIsLoadingAudit(true);
     try {
-        // TODO: Implement audit log system
-        // const response = await fetch(`/api/settings?action=audit-log&entityType=job&entityId=${jobId}`);
-        console.log('Audit log system not yet implemented');
+      const response = await fetch(`/api/audit-logs?entity_type=job&entity_id=${jobId}&limit=10`);
+      if (response.ok) {
+        const data = await response.json();
+        setAuditLogs(data.data.logs || []);
+      }
     } catch (error) {
       console.error('Failed to load audit history:', error);
     } finally {
@@ -1376,7 +1379,7 @@ export default function Jobs() {
                       variant="outline" 
                       size="sm" 
                       className="flex-1"
-                      onClick={() => handleViewJobDetails(job)}
+                      onClick={() => handleViewJob(job)}
                     >
                       View Details
                     </Button>
@@ -1877,6 +1880,14 @@ export default function Jobs() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Audit Log Modal */}
+      <AuditLogModal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        entityType="job"
+        entityId={selectedJob?.id}
+      />
     </div>
   );
 }
