@@ -422,8 +422,19 @@ export default function Candidates() {
     if (!formData.resumeFile) return;
 
     try {
-      // Convert file to text (simplified - in production you'd use proper PDF parsing)
-      const fileText = await formData.resumeFile.text();
+      // Convert file to base64 for API
+      const fileReader = new FileReader();
+      const filePromise = new Promise<string>((resolve, reject) => {
+        fileReader.onload = () => {
+          const result = fileReader.result as string;
+          const base64 = result.split(',')[1]; // Remove data URL prefix
+          resolve(base64);
+        };
+        fileReader.onerror = reject;
+      });
+      
+      fileReader.readAsDataURL(formData.resumeFile);
+      const fileBase64 = await filePromise;
       
       const response = await fetch('/api/upload-resume-fixed', {
         method: 'POST',
@@ -431,8 +442,11 @@ export default function Candidates() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          fileName: formData.resumeFile.name,
-          fileContent: fileText,
+          resume: {
+            name: formData.resumeFile.name,
+            data: fileBase64,
+            type: formData.resumeFile.type
+          },
           jobId: formData.jobId
         })
       });
@@ -441,7 +455,7 @@ export default function Candidates() {
         const result = await response.json();
         toast({
           title: "AI Analysis Complete",
-          description: `Candidate "${result.data.candidate.firstName} ${result.data.candidate.lastName}" added successfully using AI extraction.`,
+          description: `Candidate "${result.data.candidate.name}" added successfully using AI extraction.`,
         });
         setIsCreateModalOpen(false);
         resetForm();
@@ -455,7 +469,12 @@ export default function Candidates() {
         });
       }
     } catch (error) {
-      throw error;
+      console.error('Resume upload error:', error);
+      toast({
+        title: "Upload Failed",
+        description: "Failed to upload and process resume.",
+        variant: "destructive",
+      });
     }
   };
 

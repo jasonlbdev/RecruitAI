@@ -139,7 +139,7 @@ async function getAIConfig(): Promise<AIConfig> {
   }
 }
 
-async function getResumeAnalysisPrompt(): Promise<string> {
+async function getResumeAnalysisPrompt(jobId?: string): Promise<string> {
   try {
     if (!process.env.DATABASE_URL) {
       return 'Analyze this resume and extract key information including name, email, phone, skills, experience, and qualifications. Return the analysis in JSON format.';
@@ -148,11 +148,26 @@ async function getResumeAnalysisPrompt(): Promise<string> {
     const { neon } = await import('@neondatabase/serverless');
     const sql = neon(process.env.DATABASE_URL);
     
+    let basePrompt = '';
     const result = await sql`
       SELECT value FROM system_settings WHERE key = 'resume_analysis_prompt'
     `.catch(() => []);
     
-    return result[0]?.value || 'Analyze this resume and extract key information including name, email, phone, skills, experience, and qualifications. Return the analysis in JSON format.';
+    basePrompt = result[0]?.value || 'Analyze this resume and extract key information including name, email, phone, skills, experience, and qualifications. Return the analysis in JSON format.';
+    
+    // If jobId is provided, get job-specific requirements
+    if (jobId) {
+      const jobResult = await sql`
+        SELECT title, description, requirements FROM jobs WHERE id = ${jobId}
+      `.catch(() => []);
+      
+      if (jobResult[0]) {
+        const job = jobResult[0];
+        basePrompt += `\n\nJob Context:\nTitle: ${job.title}\nDescription: ${job.description}\nRequirements: ${job.requirements}\n\nPlease also assess how well the candidate matches this specific job and provide a match score (0-100).`;
+      }
+    }
+    
+    return basePrompt;
   } catch (error) {
     console.error('getResumeAnalysisPrompt error:', error);
     return 'Analyze this resume and extract key information including name, email, phone, skills, experience, and qualifications. Return the analysis in JSON format.';
@@ -243,15 +258,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Extract text from resume (with PDF parsing support)
       let resumeText = 'Resume content extracted';
       
-      if (typeof resumeFile === 'string') {
-        resumeText = resumeFile;
-      } else if (resumeFile.name && resumeFile.name.toLowerCase().endsWith('.pdf')) {
-        // Try PDF parsing for PDF files
+      if (resumeFile.name && resumeFile.name.toLowerCase().endsWith('.pdf')) {
+        // Parse PDF using the parse-resume API
         try {
-          const parseResponse = await fetch('/api/parse-resume', {
+          const parseResponse = await fetch(`${req.headers.host ? `https://${req.headers.host}` : 'http://localhost:3000'}/api/parse-resume`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ file: resumeFile })
+            body: JSON.stringify({ 
+              file: {
+                name: resumeFile.name,
+                data: resumeFile.data,
+                type: resumeFile.type
+              }
+            })
           });
           
           if (parseResponse.ok) {
@@ -259,10 +278,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             resumeText = parseResult.data.text;
           } else {
             console.warn('PDF parsing failed, using fallback');
+            resumeText = 'PDF content could not be parsed';
           }
         } catch (parseError) {
           console.error('PDF parsing error:', parseError);
+          resumeText = 'PDF content could not be parsed';
         }
+      } else if (typeof resumeFile.data === 'string') {
+        // If it's already text content
+        resumeText = Buffer.from(resumeFile.data, 'base64').toString('utf-8');
+      } else {
+        resumeText = 'Resume content could not be extracted';
       }
 
       // Get AI configuration
@@ -276,7 +302,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Get resume analysis prompt
-      const analysisPrompt = await getResumeAnalysisPrompt();
+      const analysisPrompt = await getResumeAnalysisPrompt(jobId);
 
       // Generate AI analysis
       const aiResponse = await generateAIText(aiConfig, `${analysisPrompt}\n\nResume:\n${resumeText}`);
