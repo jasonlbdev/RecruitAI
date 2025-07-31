@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import SearchBar from "./SearchBar";
 
 const Navigation = () => {
   const location = useLocation();
@@ -68,6 +69,11 @@ const Navigation = () => {
           <div className="flex items-center gap-3 p-6 border-b border-gray-200">
             <Brain className="h-8 w-8 text-blue-600" />
             <h1 className="text-xl font-bold">RecruitAI</h1>
+          </div>
+
+          {/* Search Bar */}
+          <div className="p-4 border-b border-gray-200">
+            <SearchBar />
           </div>
 
           {/* Navigation */}
