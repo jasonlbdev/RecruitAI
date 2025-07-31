@@ -1,5 +1,4 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { logAuditEvent } from './audit-logs';
 
 // Inline database functions - no external imports
 async function getAllJobs() {
@@ -85,6 +84,23 @@ async function getJobById(id: string) {
   } catch (error) {
     console.error('getJobById error:', error);
     return null;
+  }
+}
+
+// Import audit logging function
+async function logAuditEvent(entityType: string, entityId: string, action: string, userId?: string, details?: any, metadata?: any) {
+  try {
+    if (!process.env.DATABASE_URL) return;
+    
+    const { neon } = await import('@neondatabase/serverless');
+    const sql = neon(process.env.DATABASE_URL);
+    
+    await sql`
+      INSERT INTO audit_logs (entity_type, entity_id, action, user_id, details, metadata, created_at)
+      VALUES (${entityType}, ${entityId}, ${action}, ${userId || 'system'}, ${JSON.stringify(details || {})}, ${JSON.stringify(metadata || {})}, NOW())
+    `.catch(() => {});
+  } catch (error) {
+    console.error('Audit log error:', error);
   }
 }
 
