@@ -1,5 +1,4 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import pdf from 'pdf-parse';
 
 interface ParsedResume {
   text: string;
@@ -35,6 +34,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           error: 'No PDF file provided'
         });
       }
+
+      // Dynamic import to avoid FUNCTION_INVOCATION_FAILED
+      const pdf = (await import('pdf-parse')).default;
 
       // Convert base64 to buffer
       const pdfBuffer = Buffer.from(file.data, 'base64');
