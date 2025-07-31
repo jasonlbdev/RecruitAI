@@ -190,9 +190,14 @@ async function createCandidate(candidateData: any) {
     const { neon } = await import('@neondatabase/serverless');
     const sql = neon(process.env.DATABASE_URL);
     
+    // Split name into first_name and last_name
+    const nameParts = (candidateData.name || 'Unknown').split(' ');
+    const firstName = nameParts[0] || 'Unknown';
+    const lastName = nameParts.slice(1).join(' ') || 'Unknown';
+    
     const result = await sql`
-      INSERT INTO candidates (name, email, phone, resume_url, skills, experience_years, current_position)
-      VALUES (${candidateData.name}, ${candidateData.email}, ${candidateData.phone}, ${candidateData.resume_url}, ${candidateData.skills}, ${candidateData.experience_years}, ${candidateData.current_position})
+      INSERT INTO candidates (first_name, last_name, email, phone, resume_blob_url, skills, years_experience, current_position)
+      VALUES (${firstName}, ${lastName}, ${candidateData.email}, ${candidateData.phone}, ${candidateData.resume_url}, ${JSON.stringify(candidateData.skills)}, ${candidateData.experience_years}, ${candidateData.current_position})
       RETURNING *
     `.catch(() => []);
     
@@ -352,9 +357,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         email: extractedData.email || 'unknown@example.com',
         phone: extractedData.phone || '',
         resume_url: resumeUrl,
-        skills: extractedData.skills || '',
+        skills: extractedData.skills || 'Extracted from resume',
         experience_years: extractedData.experience_years || 0,
-        current_position: extractedData.current_position || ''
+        current_position: extractedData.current_position || 'Unknown'
       };
 
       const newCandidate = await createCandidate(candidateData);
