@@ -337,13 +337,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // If JSON parsing fails, try to extract information from text
         const text = aiResponse.text.toLowerCase();
         
-        // Simple text extraction as fallback
-        const nameMatch = text.match(/name[:\s]+([^\n,]+)/i);
+        // More robust text extraction patterns
+        const nameMatch = text.match(/name[:\s]+([^\n,]+)/i) || text.match(/full name[:\s]+([^\n,]+)/i);
         const emailMatch = text.match(/email[:\s]+([^\s\n]+@[^\s\n]+)/i);
         const phoneMatch = text.match(/phone[:\s]+([0-9\-\+\(\)\s]+)/i);
-        const skillsMatch = text.match(/skills?[:\s]+([^\n]+)/i);
-        const experienceMatch = text.match(/experience[:\s]+(\d+)/i);
-        const positionMatch = text.match(/position[:\s]+([^\n,]+)/i) || text.match(/title[:\s]+([^\n,]+)/i);
+        const skillsMatch = text.match(/skills?[:\s]+([^\n]+)/i) || text.match(/comma separated skills[:\s]+([^\n]+)/i);
+        const experienceMatch = text.match(/experience[:\s]+(\d+)/i) || text.match(/experience_years[:\s]+(\d+)/i);
+        const positionMatch = text.match(/position[:\s]+([^\n,]+)/i) || text.match(/title[:\s]+([^\n,]+)/i) || text.match(/current position[:\s]+([^\n,]+)/i);
         
         extractedData = {
           name: nameMatch ? nameMatch[1].trim() : 'Unknown',
