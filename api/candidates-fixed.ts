@@ -30,8 +30,8 @@ async function createCandidate(candidateData: any) {
     const sql = neon(process.env.DATABASE_URL);
     
     const result = await sql`
-      INSERT INTO candidates (name, email, phone, resume_url, skills, experience_years, current_position)
-      VALUES (${candidateData.name}, ${candidateData.email}, ${candidateData.phone}, ${candidateData.resume_url}, ${candidateData.skills}, ${candidateData.experience_years}, ${candidateData.current_position})
+      INSERT INTO candidates (first_name, last_name, email, phone, resume_blob_url, skills, years_experience, current_position)
+      VALUES (${candidateData.firstName}, ${candidateData.lastName}, ${candidateData.email}, ${candidateData.phone}, ${candidateData.resume_url}, ${JSON.stringify(candidateData.skills)}, ${candidateData.yearsOfExperience}, ${candidateData.currentPosition})
       RETURNING *
     `.catch(() => []);
     
@@ -53,13 +53,14 @@ async function updateCandidate(id: string, candidateData: any) {
     
     const result = await sql`
       UPDATE candidates 
-      SET name = ${candidateData.name}, 
+      SET first_name = ${candidateData.firstName}, 
+          last_name = ${candidateData.lastName},
           email = ${candidateData.email}, 
           phone = ${candidateData.phone}, 
-          resume_url = ${candidateData.resume_url}, 
-          skills = ${candidateData.skills}, 
-          experience_years = ${candidateData.experience_years}, 
-          current_position = ${candidateData.current_position},
+          resume_blob_url = ${candidateData.resume_url}, 
+          skills = ${JSON.stringify(candidateData.skills)}, 
+          years_experience = ${candidateData.yearsOfExperience}, 
+          current_position = ${candidateData.currentPosition},
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
