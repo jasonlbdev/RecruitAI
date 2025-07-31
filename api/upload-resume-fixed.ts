@@ -184,18 +184,25 @@ async function getResumeAnalysisPrompt(jobId?: string): Promise<{ prompt: string
 async function createCandidate(candidateData: any) {
   try {
     if (!process.env.DATABASE_URL) {
+      console.error('No DATABASE_URL configured');
       return null;
     }
     
     const { neon } = await import('@neondatabase/serverless');
     const sql = neon(process.env.DATABASE_URL);
     
+    console.log('Creating candidate with data:', candidateData);
+    
     const result = await sql`
       INSERT INTO candidates (name, email, phone, resume_url, skills, experience_years, current_position)
       VALUES (${candidateData.name}, ${candidateData.email}, ${candidateData.phone}, ${candidateData.resume_url}, ${JSON.stringify(candidateData.skills)}, ${candidateData.experience_years}, ${candidateData.current_position})
       RETURNING *
-    `.catch(() => []);
+    `.catch((error) => {
+      console.error('SQL error:', error);
+      return [];
+    });
     
+    console.log('Candidate creation result:', result);
     return result[0] || null;
   } catch (error) {
     console.error('createCandidate error:', error);
