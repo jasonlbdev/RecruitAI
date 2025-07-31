@@ -323,12 +323,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Generate AI analysis
       const aiResponse = await generateAIText(aiConfig, `${analysisPrompt}\n\nResume:\n${resumeText}`);
+      console.log('AI Response:', aiResponse.text);
 
       // Parse AI response
       let extractedData;
       try {
         // Try to parse as JSON first
         extractedData = JSON.parse(aiResponse.text);
+        console.log('Parsed JSON data:', extractedData);
       } catch (parseError) {
         console.log('AI response parsing failed, attempting text extraction:', aiResponse.text);
         
@@ -351,6 +353,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           experience_years: experienceMatch ? parseInt(experienceMatch[1]) : 0,
           current_position: positionMatch ? positionMatch[1].trim() : 'Unknown'
         };
+        console.log('Extracted data from text:', extractedData);
       }
 
       // Create candidate
@@ -363,6 +366,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         experience_years: extractedData.experience_years || 0,
         current_position: extractedData.current_position || 'Unknown'
       };
+      console.log('Candidate data to create:', candidateData);
 
       const newCandidate = await createCandidate(candidateData);
 
