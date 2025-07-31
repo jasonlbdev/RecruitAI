@@ -143,7 +143,7 @@ async function getResumeAnalysisPrompt(jobId?: string): Promise<{ prompt: string
   try {
     if (!process.env.DATABASE_URL) {
       return {
-        prompt: 'Analyze this resume and extract key information including name, email, phone, skills, experience, and qualifications. Return the analysis in JSON format.'
+        prompt: 'Analyze this resume and extract key information. You must respond with ONLY valid JSON in this exact format: {"name": "Full Name", "email": "email@example.com", "phone": "phone number", "skills": "comma separated skills", "experience_years": number, "current_position": "job title"}. Do not include any other text or formatting.'
       };
     }
     
@@ -155,7 +155,7 @@ async function getResumeAnalysisPrompt(jobId?: string): Promise<{ prompt: string
       SELECT value FROM system_settings WHERE key = 'resume_analysis_prompt'
     `.catch(() => []);
     
-    basePrompt = result[0]?.value || 'Analyze this resume and extract key information including name, email, phone, skills, experience, and qualifications. Return the analysis in JSON format.';
+    basePrompt = result[0]?.value || 'Analyze this resume and extract key information. You must respond with ONLY valid JSON in this exact format: {"name": "Full Name", "email": "email@example.com", "phone": "phone number", "skills": "comma separated skills", "experience_years": number, "current_position": "job title"}. Do not include any other text or formatting.';
     
     let weights: any = null;
     
@@ -176,7 +176,7 @@ async function getResumeAnalysisPrompt(jobId?: string): Promise<{ prompt: string
   } catch (error) {
     console.error('getResumeAnalysisPrompt error:', error);
     return {
-      prompt: 'Analyze this resume and extract key information including name, email, phone, skills, experience, and qualifications. Return the analysis in JSON format.'
+      prompt: 'Analyze this resume and extract key information. You must respond with ONLY valid JSON in this exact format: {"name": "Full Name", "email": "email@example.com", "phone": "phone number", "skills": "comma separated skills", "experience_years": number, "current_position": "job title"}. Do not include any other text or formatting.'
     };
   }
 }
@@ -317,15 +317,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Parse AI response
       let extractedData;
       try {
+        // Try to parse as JSON first
         extractedData = JSON.parse(aiResponse.text);
       } catch (parseError) {
+        console.log('AI response parsing failed, attempting text extraction:', aiResponse.text);
+        
+        // If JSON parsing fails, try to extract information from text
+        const text = aiResponse.text.toLowerCase();
+        
+        // Simple text extraction as fallback
+        const nameMatch = text.match(/name[:\s]+([^\n,]+)/i);
+        const emailMatch = text.match(/email[:\s]+([^\s\n]+@[^\s\n]+)/i);
+        const phoneMatch = text.match(/phone[:\s]+([0-9\-\+\(\)\s]+)/i);
+        const skillsMatch = text.match(/skills?[:\s]+([^\n]+)/i);
+        const experienceMatch = text.match(/experience[:\s]+(\d+)/i);
+        const positionMatch = text.match(/position[:\s]+([^\n,]+)/i) || text.match(/title[:\s]+([^\n,]+)/i);
+        
         extractedData = {
-          name: 'Extracted from AI response',
-          email: 'Extracted from AI response',
-          phone: 'Extracted from AI response',
-          skills: 'Extracted from AI response',
-          experience_years: 0,
-          current_position: 'Extracted from AI response'
+          name: nameMatch ? nameMatch[1].trim() : 'Unknown',
+          email: emailMatch ? emailMatch[1].trim() : 'unknown@example.com',
+          phone: phoneMatch ? phoneMatch[1].trim() : '',
+          skills: skillsMatch ? skillsMatch[1].trim() : 'Extracted from resume',
+          experience_years: experienceMatch ? parseInt(experienceMatch[1]) : 0,
+          current_position: positionMatch ? positionMatch[1].trim() : 'Unknown'
         };
       }
 
