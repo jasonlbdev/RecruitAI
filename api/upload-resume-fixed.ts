@@ -375,7 +375,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log('AI candidate creation failed, trying fallback...');
         const fallbackData = {
           name: 'Extracted from Resume',
-          email: 'extracted@example.com',
+          email: `extracted-${Date.now()}@example.com`,
           phone: '',
           resume_url: resumeUrl,
           skills: 'Extracted from resume',
