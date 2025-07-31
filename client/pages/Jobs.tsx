@@ -157,12 +157,13 @@ export default function Jobs() {
     loadJobs();
   }, [searchTerm, statusFilter, departmentFilter]);
 
-  useEffect(() => {
-    // Check for expired jobs when jobs load
-    if (jobs.length > 0) {
-      handleExpiredJobs();
-    }
-  }, [jobs]);
+  // Remove the problematic useEffect that causes infinite loops
+  // useEffect(() => {
+  //   // Check for expired jobs when jobs load
+  //   if (jobs.length > 0) {
+  //     handleExpiredJobs();
+  //   }
+  // }, [jobs]);
 
   const loadJobs = async () => {
     setLoading(true);
@@ -581,11 +582,17 @@ export default function Jobs() {
       });
 
       if (response.ok) {
+        // Update local state instead of reloading all jobs
+        setJobs(prevJobs => 
+          prevJobs.map(j => 
+            j.id === job.id ? { ...j, status: newStatus } : j
+          )
+        );
+        
         toast({
           title: "Status updated",
           description: `"${job.title}" status changed to ${newStatus}.`,
         });
-        loadJobs(); // Reload jobs
       } else {
         const errorData = await response.json();
         toast({
