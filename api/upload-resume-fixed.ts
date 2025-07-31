@@ -139,10 +139,12 @@ async function getAIConfig(): Promise<AIConfig> {
   }
 }
 
-async function getResumeAnalysisPrompt(jobId?: string): Promise<string> {
+async function getResumeAnalysisPrompt(jobId?: string): Promise<{ prompt: string; weights?: any }> {
   try {
     if (!process.env.DATABASE_URL) {
-      return 'Analyze this resume and extract key information including name, email, phone, skills, experience, and qualifications. Return the analysis in JSON format.';
+      return {
+        prompt: 'Analyze this resume and extract key information including name, email, phone, skills, experience, and qualifications. Return the analysis in JSON format.'
+      };
     }
     
     const { neon } = await import('@neondatabase/serverless');
@@ -155,22 +157,27 @@ async function getResumeAnalysisPrompt(jobId?: string): Promise<string> {
     
     basePrompt = result[0]?.value || 'Analyze this resume and extract key information including name, email, phone, skills, experience, and qualifications. Return the analysis in JSON format.';
     
-    // If jobId is provided, get job-specific requirements
+    let weights: any = null;
+    
+    // If jobId is provided, get job-specific requirements and weights
     if (jobId) {
       const jobResult = await sql`
-        SELECT title, description, requirements FROM jobs WHERE id = ${jobId}
+        SELECT title, description, requirements, scoring_weights FROM jobs WHERE id = ${jobId}
       `.catch(() => []);
       
       if (jobResult[0]) {
         const job = jobResult[0];
-        basePrompt += `\n\nJob Context:\nTitle: ${job.title}\nDescription: ${job.description}\nRequirements: ${job.requirements}\n\nPlease also assess how well the candidate matches this specific job and provide a match score (0-100).`;
+        weights = job.scoring_weights;
+        basePrompt += `\n\nJob Context:\nTitle: ${job.title}\nDescription: ${job.description}\nRequirements: ${JSON.stringify(job.requirements)}\n\nPlease also assess how well the candidate matches this specific job and provide a match score (0-100) based on the following criteria:\n- Experience match (weight: ${weights?.experience || 30}%)\n- Skills match (weight: ${weights?.skills || 30}%)\n- Location match (weight: ${weights?.location || 15}%)\n- Education match (weight: ${weights?.education || 15}%)\n- Salary expectations match (weight: ${weights?.salary || 10}%)\n\nProvide individual scores for each criterion and an overall weighted score.`;
       }
     }
     
-    return basePrompt;
+    return { prompt: basePrompt, weights };
   } catch (error) {
     console.error('getResumeAnalysisPrompt error:', error);
-    return 'Analyze this resume and extract key information including name, email, phone, skills, experience, and qualifications. Return the analysis in JSON format.';
+    return {
+      prompt: 'Analyze this resume and extract key information including name, email, phone, skills, experience, and qualifications. Return the analysis in JSON format.'
+    };
   }
 }
 
@@ -302,7 +309,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Get resume analysis prompt
-      const analysisPrompt = await getResumeAnalysisPrompt(jobId);
+      const { prompt: analysisPrompt, weights } = await getResumeAnalysisPrompt(jobId);
 
       // Generate AI analysis
       const aiResponse = await generateAIText(aiConfig, `${analysisPrompt}\n\nResume:\n${resumeText}`);

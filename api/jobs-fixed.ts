@@ -30,9 +30,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
     } else if (req.method === 'POST') {
-      const { title, company, location, description, requirements, salary_range, status } = req.body;
+      const { 
+        title, 
+        department, 
+        location, 
+        jobType, 
+        employmentType, 
+        salaryMin, 
+        salaryMax, 
+        description, 
+        requirements, 
+        niceToHave, 
+        deadline, 
+        isRemote, 
+        experienceLevel, 
+        scoringWeights, 
+        status 
+      } = req.body;
 
-      if (!title || !company || !location) {
+      if (!title || !department || !location) {
         return res.status(400).json({
           success: false,
           error: 'Missing required fields'
@@ -40,8 +56,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const result = await sql`
-        INSERT INTO jobs (title, company, location, description, requirements, salary_range, status)
-        VALUES (${title}, ${company}, ${location}, ${description || ''}, ${requirements || ''}, ${salary_range || ''}, ${status || 'active'})
+        INSERT INTO jobs (
+          title, department, location, type, salary_min, salary_max, 
+          description, requirements, benefits, deadline, is_remote, 
+          experience_level, scoring_weights, status
+        )
+        VALUES (
+          ${title}, ${department}, ${location}, ${jobType || 'full-time'}, 
+          ${salaryMin || null}, ${salaryMax || null}, ${description || ''}, 
+          ${JSON.stringify(requirements || [])}, ${JSON.stringify(niceToHave || [])}, 
+          ${deadline || null}, ${isRemote || false}, ${experienceLevel || 'mid'}, 
+          ${JSON.stringify(scoringWeights || {experience: 30, skills: 30, location: 15, education: 15, salary: 10})}, 
+          ${status || 'active'}
+        )
         RETURNING *
       `.catch(() => []);
 
@@ -58,9 +85,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
     } else if (req.method === 'PUT') {
-      const { id, title, company, location, description, requirements, salary_range, status } = req.body;
+      const { 
+        id, 
+        title, 
+        department, 
+        location, 
+        jobType, 
+        employmentType, 
+        salaryMin, 
+        salaryMax, 
+        description, 
+        requirements, 
+        niceToHave, 
+        deadline, 
+        isRemote, 
+        experienceLevel, 
+        scoringWeights, 
+        status 
+      } = req.body;
 
-      if (!id || !title || !company || !location) {
+      if (!id || !title || !department || !location) {
         return res.status(400).json({
           success: false,
           error: 'Missing required fields'
@@ -69,9 +113,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const result = await sql`
         UPDATE jobs 
-        SET title = ${title}, company = ${company}, location = ${location}, 
-            description = ${description || ''}, requirements = ${requirements || ''}, 
-            salary_range = ${salary_range || ''}, status = ${status || 'active'}, updated_at = NOW()
+        SET 
+          title = ${title}, 
+          department = ${department}, 
+          location = ${location}, 
+          type = ${jobType || 'full-time'},
+          salary_min = ${salaryMin || null}, 
+          salary_max = ${salaryMax || null},
+          description = ${description || ''}, 
+          requirements = ${JSON.stringify(requirements || [])}, 
+          benefits = ${JSON.stringify(niceToHave || [])},
+          deadline = ${deadline || null},
+          is_remote = ${isRemote || false},
+          experience_level = ${experienceLevel || 'mid'},
+          scoring_weights = ${JSON.stringify(scoringWeights || {experience: 30, skills: 30, location: 15, education: 15, salary: 10})},
+          status = ${status || 'active'}, 
+          updated_at = NOW()
         WHERE id = ${id}
         RETURNING *
       `.catch(() => []);
