@@ -217,7 +217,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('Candidates API error:', error);
     return res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: error instanceof Error ? error.message : 'Internal server error'
     });
   }
 } 

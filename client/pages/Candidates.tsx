@@ -70,6 +70,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import CandidateNotesModal from '@/components/CandidateNotesModal';
 import AdvancedFilters from '@/components/AdvancedFilters';
+import BulkOperations from '@/components/BulkOperations';
 
 interface Candidate {
   id: string;
@@ -200,6 +201,7 @@ export default function Candidates() {
     status: '',
     dateRange: ''
   });
+  const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
 
   useEffect(() => {
     loadCandidates();
@@ -943,6 +945,20 @@ export default function Candidates() {
                 onClearFilters={handleClearFilters}
                 isOpen={true}
                 onToggle={() => setIsFiltersOpen(false)}
+              />
+            </div>
+          )}
+
+          {/* Bulk Operations */}
+          {selectedCandidates.length > 0 && (
+            <div className="mb-6">
+              <BulkOperations
+                type="candidates"
+                selectedItems={selectedCandidates}
+                onOperationComplete={() => {
+                  setSelectedCandidates([]);
+                  loadCandidates();
+                }}
               />
             </div>
           )}

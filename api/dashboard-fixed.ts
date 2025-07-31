@@ -1,5 +1,24 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 
+// Simple in-memory cache for dashboard metrics
+const dashboardCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCachedData(key: string) {
+  const cached = dashboardCache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+  return null;
+}
+
+function setCachedData(key: string, data: any) {
+  dashboardCache.set(key, {
+    data,
+    timestamp: Date.now()
+  });
+}
+
 // Inline database functions - no external imports
 async function getDashboardMetrics() {
   try {
@@ -65,10 +84,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'GET') {
     try {
+      // Check cache first
+      const cacheKey = 'dashboard_metrics';
+      const cachedMetrics = getCachedData(cacheKey);
+      
+      if (cachedMetrics) {
+        return res.status(200).json({
+          success: true,
+          metrics: cachedMetrics,
+          cached: true
+        });
+      }
+
       const metrics = await getDashboardMetrics();
+      
+      // Cache the results
+      setCachedData(cacheKey, metrics);
+      
       return res.status(200).json({
         success: true,
-        metrics
+        metrics,
+        cached: false
       });
     } catch (error) {
       console.error('Dashboard API error:', error);
