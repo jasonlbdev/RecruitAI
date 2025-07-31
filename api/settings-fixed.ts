@@ -43,6 +43,15 @@ async function updateSystemSetting(key: string, value: string) {
     const { neon } = await import('@neondatabase/serverless');
     const sql = neon(process.env.DATABASE_URL);
     
+    // Validate API keys to prevent corruption
+    if (key === 'openai_api_key' || key === 'xai_api_key') {
+      // Ensure the value is a clean API key
+      if (value && !value.startsWith('sk-') && !value.startsWith('xai-')) {
+        console.error('Invalid API key format:', key);
+        return false;
+      }
+    }
+    
     await sql`
       INSERT INTO system_settings (key, value, updated_at) 
       VALUES (${key}, ${value}, CURRENT_TIMESTAMP)
@@ -127,7 +136,19 @@ async function handleSaveSettings(req: VercelRequest, res: VercelResponse) {
     // Update each setting
     for (const [key, value] of Object.entries(settingsData)) {
       if (typeof value === 'string' || typeof value === 'number') {
-        await updateSystemSetting(key, String(value));
+        const stringValue = String(value);
+        
+        // Special handling for API keys
+        if (key === 'openai_api_key' || key === 'xai_api_key') {
+          // Only update if it's a valid API key or empty
+          if (!stringValue || stringValue.startsWith('sk-') || stringValue.startsWith('xai-')) {
+            await updateSystemSetting(key, stringValue);
+          } else {
+            console.error('Invalid API key format:', key, stringValue);
+          }
+        } else {
+          await updateSystemSetting(key, stringValue);
+        }
       }
     }
 
