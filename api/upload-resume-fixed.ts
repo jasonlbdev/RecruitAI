@@ -112,8 +112,8 @@ async function getAIConfig(): Promise<AIConfig> {
 
     settings.forEach((setting: any) => {
       if (setting.key === 'ai_provider') config.provider = setting.value;
-      if (setting.key === 'openai_api_key') config.openaiApiKey = setting.value;
-      if (setting.key === 'openai_model') config.openaiModel = setting.value;
+      if (setting.key === 'openai_api_key') config.apiKey = setting.value;
+      if (setting.key === 'openai_model') config.model = setting.value;
       if (setting.key === 'xai_api_key') config.xaiApiKey = setting.value;
       if (setting.key === 'xai_model') config.xaiModel = setting.value;
       if (setting.key === 'max_tokens') config.maxTokens = parseInt(setting.value);
@@ -122,8 +122,8 @@ async function getAIConfig(): Promise<AIConfig> {
 
     return {
       provider: config.provider,
-      apiKey: config.provider === 'openai' ? config.openaiApiKey : config.xaiApiKey,
-      model: config.provider === 'openai' ? config.openaiModel : config.xaiModel,
+      apiKey: config.provider === 'openai' ? config.apiKey : config.xaiApiKey,
+      model: config.provider === 'openai' ? config.model : config.xaiModel,
       maxTokens: config.maxTokens,
       temperature: config.temperature
     };
