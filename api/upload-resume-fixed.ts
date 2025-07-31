@@ -241,7 +241,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const resumeFile = formData.resume;
       const jobId = formData.jobId;
 
-      if (!resumeFile) {
+      if (!resumeFile || !resumeFile.data) {
         return res.status(400).json({
           success: false,
           error: 'Resume file is required'
@@ -291,11 +291,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.error('PDF parsing error:', parseError);
           resumeText = 'PDF content could not be parsed';
         }
-      } else if (typeof resumeFile.data === 'string') {
-        // If it's already text content
-        resumeText = Buffer.from(resumeFile.data, 'base64').toString('utf-8');
       } else {
-        resumeText = 'Resume content could not be extracted';
+        // Handle text files or other formats
+        try {
+          resumeText = Buffer.from(resumeFile.data, 'base64').toString('utf-8');
+        } catch (error) {
+          console.error('Text extraction error:', error);
+          resumeText = 'Resume content could not be extracted';
+        }
       }
 
       // Get AI configuration
