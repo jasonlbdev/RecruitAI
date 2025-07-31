@@ -31,32 +31,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!file || !file.data) {
         return res.status(400).json({
           success: false,
-          error: 'No PDF file provided'
+          error: 'No file provided'
         });
       }
 
-      // Dynamic import to avoid FUNCTION_INVOCATION_FAILED
-      const pdf = (await import('pdf-parse')).default;
+      let parsedResume: ParsedResume;
 
-      // Convert base64 to buffer
-      const pdfBuffer = Buffer.from(file.data, 'base64');
+      // Handle different file types
+      if (file.name && file.name.toLowerCase().endsWith('.pdf')) {
+        try {
+          // Dynamic import to avoid FUNCTION_INVOCATION_FAILED
+          const pdf = (await import('pdf-parse')).default;
 
-      // Parse PDF
-      const pdfData = await pdf(pdfBuffer);
+          // Convert base64 to buffer
+          const pdfBuffer = Buffer.from(file.data, 'base64');
 
-      const parsedResume: ParsedResume = {
-        text: pdfData.text,
-        pageCount: pdfData.numpages,
-        metadata: {
-          title: pdfData.info?.Title,
-          author: pdfData.info?.Author,
-          subject: pdfData.info?.Subject,
-          creator: pdfData.info?.Creator,
-          producer: pdfData.info?.Producer,
-          creationDate: pdfData.info?.CreationDate,
-          modDate: pdfData.info?.ModDate
+          // Parse PDF
+          const pdfData = await pdf(pdfBuffer);
+
+          parsedResume = {
+            text: pdfData.text,
+            pageCount: pdfData.numpages,
+            metadata: {
+              title: pdfData.info?.Title,
+              author: pdfData.info?.Author,
+              subject: pdfData.info?.Subject,
+              creator: pdfData.info?.Creator,
+              producer: pdfData.info?.Producer,
+              creationDate: pdfData.info?.CreationDate,
+              modDate: pdfData.info?.ModDate
+            }
+          };
+        } catch (pdfError) {
+          console.error('PDF parsing failed, using fallback:', pdfError);
+          // Fallback for PDF parsing errors
+          parsedResume = {
+            text: 'PDF content could not be parsed. Please check the file format.',
+            pageCount: 1,
+            metadata: {}
+          };
         }
-      };
+      } else {
+        // Handle text files
+        const textContent = Buffer.from(file.data, 'base64').toString('utf-8');
+        parsedResume = {
+          text: textContent,
+          pageCount: 1,
+          metadata: {}
+        };
+      }
 
       return res.status(200).json({
         success: true,
@@ -64,10 +87,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
     } catch (error) {
-      console.error('PDF parsing error:', error);
+      console.error('File parsing error:', error);
       return res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to parse PDF'
+        error: error instanceof Error ? error.message : 'Failed to parse file'
       });
     }
   }
