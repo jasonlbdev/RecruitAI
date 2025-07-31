@@ -110,6 +110,45 @@ async function initializeDatabase() {
       )
     `;
 
+    // Create interviews table
+    await sql`
+      CREATE TABLE IF NOT EXISTS interviews (
+        id SERIAL PRIMARY KEY,
+        application_id VARCHAR(255) NOT NULL,
+        candidate_id VARCHAR(255) NOT NULL,
+        job_id VARCHAR(255) NOT NULL,
+        interviewer_id VARCHAR(255) NOT NULL,
+        scheduled_date TIMESTAMP WITH TIME ZONE NOT NULL,
+        duration INTEGER NOT NULL,
+        location VARCHAR(255) NOT NULL,
+        type VARCHAR(20) NOT NULL CHECK (type IN ('phone', 'video', 'onsite')),
+        status VARCHAR(20) DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'cancelled', 'rescheduled')),
+        notes TEXT,
+        feedback TEXT,
+        rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `;
+
+    // Create onboarding_steps table
+    await sql`
+      CREATE TABLE IF NOT EXISTS onboarding_steps (
+        id SERIAL PRIMARY KEY,
+        application_id VARCHAR(255) NOT NULL,
+        candidate_id VARCHAR(255) NOT NULL,
+        job_id VARCHAR(255) NOT NULL,
+        step_type VARCHAR(50) NOT NULL CHECK (step_type IN ('offer_letter', 'background_check', 'reference_check', 'document_collection', 'orientation', 'first_day')),
+        status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'failed')),
+        due_date TIMESTAMP WITH TIME ZONE,
+        completed_date TIMESTAMP WITH TIME ZONE,
+        notes TEXT,
+        assigned_to VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `;
+
     // Create email_logs table
     await sql`
       CREATE TABLE IF NOT EXISTS email_logs (
