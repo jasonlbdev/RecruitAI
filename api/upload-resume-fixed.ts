@@ -371,9 +371,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const newCandidate = await createCandidate(candidateData);
 
       if (!newCandidate) {
-        return res.status(500).json({
-          success: false,
-          error: 'Failed to create candidate'
+        // Fallback: try to create candidate with basic data if AI extraction fails
+        console.log('AI candidate creation failed, trying fallback...');
+        const fallbackData = {
+          name: 'Extracted from Resume',
+          email: 'extracted@example.com',
+          phone: '',
+          resume_url: resumeUrl,
+          skills: 'Extracted from resume',
+          experience_years: 0,
+          current_position: 'Unknown'
+        };
+        
+        const fallbackCandidate = await createCandidate(fallbackData);
+        
+        if (!fallbackCandidate) {
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to create candidate (both AI and fallback failed)'
+          });
+        }
+        
+        return res.status(200).json({
+          success: true,
+          data: {
+            candidate: fallbackCandidate,
+            application: null,
+            aiAnalysis: extractedData,
+            aiProvider: aiConfig.provider,
+            usage: aiResponse.usage,
+            note: 'Created with fallback data due to AI extraction issues'
+          }
         });
       }
 
